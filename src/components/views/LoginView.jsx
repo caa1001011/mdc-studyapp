@@ -138,11 +138,11 @@ export default function LoginView({ onLoginSuccess }) {
                 </label>
               </div>
 
-              {/* Nút Đăng Nhập Màu Xanh Tím Đồng Bộ */}
+              {/* Nút Đăng Nhập Màu Sắc Tinh Tế, Sang Trọng */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-3 py-3 px-4 rounded-xl bg-gradient-to-r from-[#4f46e5] to-[#5b4fe8] hover:from-[#4338ca] hover:to-[#4f46e5] active:scale-[0.99] text-white text-sm font-semibold shadow-md shadow-indigo-500/25 flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer disabled:opacity-70"
+                className="group relative w-full mt-4 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:via-indigo-600 hover:to-violet-500 active:scale-[0.99] text-white text-sm font-semibold font-display tracking-wide border border-white/25 shadow-[inset_0_1.5px_1.5px_rgba(255,255,255,0.35),0_10px_22px_-5px_rgba(79,70,229,0.38)] hover:shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.5),0_14px_28px_-6px_rgba(79,70,229,0.45)] hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:pointer-events-none"
               >
                 {isLoading ? (
                   <>
@@ -152,7 +152,7 @@ export default function LoginView({ onLoginSuccess }) {
                 ) : (
                   <>
                     <span>Đăng Nhập</span>
-                    <ArrowRight className="w-4 h-4 text-white" />
+                    <ArrowRight className="w-4 h-4 text-white/90 transition-transform duration-200 group-hover:translate-x-1" />
                   </>
                 )}
               </button>
