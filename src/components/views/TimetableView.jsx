@@ -12,11 +12,15 @@ import {
   Sparkles,
   Settings,
   Check,
+  Save,
+  Loader2,
   Sun,
   Sunset,
   Moon,
   ChevronDown
 } from 'lucide-react';
+import { fetchUserTimetable, saveUserTimetable } from '../../services/timetableService';
+import { getSessionUser } from '../../services/authService';
 
 // Default Days of Week (Monday to Sunday)
 const DAYS_OF_WEEK = [
@@ -55,10 +59,20 @@ const DEFAULT_TIME_SLOTS = [
 // Default Initial Classes placed into the grid (Đã xóa toàn bộ dữ liệu mẫu)
 const DEFAULT_SCHEDULE_ENTRIES = [];
 
-export default function TimetableView() {
+export default function TimetableView({ currentUser: propsUser }) {
+  const sessionUser = getSessionUser();
+  const currentUser = propsUser || sessionUser;
+  const username = currentUser?.username || 'admin';
+
+  // Trạng thái thay đổi: Mặc định là false (nút Lưu sẽ mờ)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // null | 'success' | 'error'
+  const [, setIsLoadingFromFirebase] = useState(false);
+
   // State for Time Slots
   const [timeSlots, setTimeSlots] = useState(() => {
-    const saved = localStorage.getItem('lumina_time_slots');
+    const saved = localStorage.getItem(`lumina_time_slots_${username}`) || localStorage.getItem('lumina_time_slots');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -75,7 +89,14 @@ export default function TimetableView() {
 
   // State for Schedule entries in grid (xóa sạch toàn bộ dữ liệu cũ theo yêu cầu)
   const [scheduleEntries, setScheduleEntries] = useState(() => {
-    localStorage.removeItem('lumina_schedule_entries');
+    const saved = localStorage.getItem(`lumina_schedule_entries_${username}`) || localStorage.getItem('lumina_schedule_entries');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
     return [];
   });
 
@@ -96,14 +117,50 @@ export default function TimetableView() {
   const [cellColor, setCellColor] = useState('purple');
   const [cellNotes, setCellNotes] = useState('');
 
-  // Lưu bản sao vào localStorage khi có thay đổi
+  // Tải dữ liệu thời khóa biểu cá nhân của người dùng từ Firebase Firestore khi mở trang
   useEffect(() => {
+    let isCancelled = false;
+
+    async function loadData() {
+      if (!username) return;
+      setIsLoadingFromFirebase(true);
+      try {
+        const data = await fetchUserTimetable(username);
+        if (!isCancelled && data) {
+          if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
+            setTimeSlots(data.timeSlots);
+          }
+          if (Array.isArray(data.scheduleEntries)) {
+            setScheduleEntries(data.scheduleEntries);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải thời khóa biểu từ Firebase:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingFromFirebase(false);
+          setHasUnsavedChanges(false);
+        }
+      }
+    }
+
+    loadData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [username]);
+
+  // Lưu bản sao vào localStorage theo user khi có thay đổi
+  useEffect(() => {
+    localStorage.setItem(`lumina_time_slots_${username}`, JSON.stringify(timeSlots));
     localStorage.setItem('lumina_time_slots', JSON.stringify(timeSlots));
-  }, [timeSlots]);
+  }, [timeSlots, username]);
 
   useEffect(() => {
+    localStorage.setItem(`lumina_schedule_entries_${username}`, JSON.stringify(scheduleEntries));
     localStorage.setItem('lumina_schedule_entries', JSON.stringify(scheduleEntries));
-  }, [scheduleEntries]);
+  }, [scheduleEntries, username]);
 
   // Open modal to add a brand new time slot
   const handleOpenAddSlot = () => {
@@ -151,6 +208,7 @@ export default function TimetableView() {
       setTimeSlots([...timeSlots, newSlot]);
     }
 
+    setHasUnsavedChanges(true);
     setIsSlotModalOpen(false);
   };
 
@@ -159,6 +217,7 @@ export default function TimetableView() {
     if (confirm('Bạn có chắc chắn muốn xóa khung thời gian này và toàn bộ các tiết học trong đó?')) {
       setTimeSlots(timeSlots.filter((s) => s.id !== slotId));
       setScheduleEntries(scheduleEntries.filter((e) => e.slotId !== slotId));
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -225,6 +284,7 @@ export default function TimetableView() {
       setScheduleEntries([...scheduleEntries, newEntry]);
     }
 
+    setHasUnsavedChanges(true);
     setIsCellModalOpen(false);
   };
 
@@ -234,7 +294,34 @@ export default function TimetableView() {
       setScheduleEntries(
         scheduleEntries.filter((item) => item.id !== selectedCell.existingEntry.id)
       );
+      setHasUnsavedChanges(true);
       setIsCellModalOpen(false);
+    }
+  };
+
+  // Lưu toàn bộ thời khóa biểu lên Firebase cho tài khoản hiện tại
+  const handleSaveTimetable = async () => {
+    if (!hasUnsavedChanges || isSaving) return;
+    setIsSaving(true);
+    setSaveStatus(null);
+    try {
+      await saveUserTimetable(username, {
+        timeSlots,
+        scheduleEntries
+      });
+      setHasUnsavedChanges(false);
+      setSaveStatus('success');
+      setTimeout(() => {
+        setSaveStatus(null);
+      }, 3500);
+    } catch (error) {
+      console.error('Lỗi lưu thời khóa biểu lên Firebase:', error);
+      setSaveStatus('error');
+      setTimeout(() => {
+        setSaveStatus(null);
+      }, 4000);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -245,26 +332,71 @@ export default function TimetableView() {
 
   return (
     <div className="space-y-5 pb-12">
-      {/* 1. Header & Controls - Nút "Thêm khung giờ mới" đưa lên hàng trên, xóa mô tả và session filter */}
-      <div className="flex items-start sm:items-center justify-between gap-4">
+      {/* 1. Header & Controls - Đổi tên thành "Thời khóa biểu cá nhân" và tích hợp nút Lưu Firebase */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-1.5">
             <CalendarDays className="w-3.5 h-3.5 text-cyan-300" />
             <span>Thời Khóa Biểu Tuần</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
-            Bảng Thời Khóa Biểu
+            Thời khóa biểu cá nhân
           </h1>
         </div>
 
-        {/* Add Time Slot Button - Nằm ở hàng trên cùng bên phải */}
-        <button
-          onClick={handleOpenAddSlot}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-600/30 hover:scale-[1.02] transition-all shrink-0 mt-1"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Thêm Khung Giờ Mới</span>
-        </button>
+        {/* Action Controls: Nút Lưu thời khóa biểu (Firebase) & Thêm Khung Giờ Mới */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {saveStatus === 'success' && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold animate-fadeIn">
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Đã lưu lên đám mây cho @{username}</span>
+            </div>
+          )}
+
+          {saveStatus === 'error' && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold animate-fadeIn">
+              <X className="w-3.5 h-3.5 text-rose-400" />
+              <span>Lỗi lưu Firebase, đã lưu bản sao cục bộ</span>
+            </div>
+          )}
+
+          {/* Nút "Lưu thời khóa biểu": Mặc định mờ, khi có thay đổi thì sáng lên */}
+          <button
+            onClick={handleSaveTimetable}
+            disabled={!hasUnsavedChanges || isSaving}
+            title={
+              hasUnsavedChanges
+                ? `Lưu thời khóa biểu lên Firebase cho tài khoản @${username}`
+                : 'Mặc định mờ. Nút sẽ sáng lên khi bạn thêm mới, sửa, xóa khung giờ hoặc môn học'
+            }
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all duration-300 ${
+              hasUnsavedChanges
+                ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-600/35 hover:scale-[1.02] active:scale-[0.98] cursor-pointer border border-emerald-400/50 ring-2 ring-emerald-400/25'
+                : 'border border-white/10 bg-white/[0.04] text-slate-400 opacity-40 cursor-not-allowed shadow-none'
+            } ${isSaving ? 'cursor-wait opacity-85' : ''}`}
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <>
+                <Save className={`w-4 h-4 ${hasUnsavedChanges ? 'text-white' : 'text-slate-400'}`} />
+                <span>Lưu thời khóa biểu</span>
+              </>
+            )}
+          </button>
+
+          {/* Add Time Slot Button */}
+          <button
+            onClick={handleOpenAddSlot}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-600/30 hover:scale-[1.02] transition-all shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm Khung Giờ Mới</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. THE GRAND TIMETABLE MATRIX TABLE */}

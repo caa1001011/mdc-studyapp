@@ -80,7 +80,7 @@ export default function App() {
       case 'dashboard':
         return <DashboardView setActiveTab={setActiveTab} currentUser={currentUser} />;
       case 'timetable':
-        return <TimetableView />;
+        return <TimetableView currentUser={currentUser} />;
       case 'study':
         return <StudySpaceView />;
       case 'flashcards':
