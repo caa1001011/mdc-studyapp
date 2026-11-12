@@ -49,7 +49,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
   ];
 
   return (
-    <aside className="w-72 flex-shrink-0 flex flex-col justify-between p-4 glass-panel border-r border-white/10 h-[calc(100vh-65px)] sticky top-[65px] overflow-y-auto scrollbar-none">
+    <aside className="w-72 flex-shrink-0 flex flex-col justify-between p-4 glass-panel border-r border-white/10 h-[calc(100vh-53px)] sticky top-[53px] overflow-y-auto scrollbar-none">
       {/* 1. Main Navigation Items */}
       <div className="space-y-1.5">
         <div className="px-3 pb-2 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">

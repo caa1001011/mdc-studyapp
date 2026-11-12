@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Flame,
-  Star,
-  Bell,
-  Search,
   Clock,
   Maximize2,
-  Command,
+  Minimize2,
   Sun,
   Moon,
   LogOut
@@ -34,14 +30,22 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
     }
   };
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
   const formattedDate = currentTime.toLocaleDateString('vi-VN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'numeric',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
   });
 
@@ -55,140 +59,105 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
   const displayName = currentUser?.fullName || currentUser?.username || USER_PROFILE.name;
   const displayTitle = currentUser?.title || USER_PROFILE.title;
   const displayAvatar = currentUser?.avatar || USER_PROFILE.avatar;
-  const displayStreak = currentUser?.streakDays ?? USER_PROFILE.streakDays;
-  const displayXp = currentUser?.xp ?? USER_PROFILE.xp;
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-6 lg:px-10 py-3 transition-all">
-      <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-6">
-        {/* Left: Brand & Student Subtitle */}
-        <div className="flex items-center gap-3.5">
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-cyan-500/20 border border-white/20 bg-white/5">
+    <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/10 dark:border-white/10 border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2 transition-all">
+      <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-4">
+        {/* 1. Góc trên bên trái: CHỈ CÓ LOGO VÀ TÊN WEB APP */}
+        <div className="flex items-center gap-2.5 select-none flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-white/20 bg-white/90 flex items-center justify-center p-0.5">
             <img 
               src="/logo.png" 
               alt="Beacon Learn Logo" 
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover rounded-lg"
             />
           </div>
+          <span className="font-display font-bold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white">
+            Beacon Learn
+          </span>
+        </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-display font-bold text-xl tracking-tight text-white">
-                Beacon Learn
-              </span>
-              <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-cyan-500/20 border border-cyan-500/30 text-cyan-200">
-                THPT
-              </span>
+        {/* 2. Giữa: Đồng hồ thời gian thực tinh tế, hiển thị ngày giờ trực quan */}
+        <div className="flex items-center justify-center flex-1 mx-2">
+          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full glass-card border border-slate-200/90 dark:border-white/10 shadow-sm transition-all select-none">
+            <div className="relative flex items-center justify-center">
+              <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-purple-400" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping opacity-75" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500" />
             </div>
-            <p className="text-[11px] text-slate-400 font-normal">
-              Góc tự học & Luyện thi thông minh
-            </p>
+
+            {/* Giờ thời gian thực */}
+            <span className="font-mono font-bold text-xs sm:text-sm tracking-wider text-slate-800 dark:text-white">
+              {formattedTime}
+            </span>
+
+            <span className="text-slate-300 dark:text-white/20">|</span>
+
+            {/* Ngày tháng */}
+            <span className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-300 capitalize">
+              {formattedDate}
+            </span>
           </div>
         </div>
 
-        {/* Center: Search & Live Clock */}
-        <div className="flex items-center gap-4 flex-1 max-w-xl mx-auto">
-          {/* Quick Search */}
-          <div className="relative w-full">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm môn học, bài tập về nhà, thẻ ghi nhớ... (Ctrl + K)"
-              className="w-full pl-10 pr-16 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-purple-400/60 focus:bg-white/[0.06] transition-all"
-            />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 text-[10px] text-slate-400 font-mono">
-              <Command className="w-2.5 h-2.5" />
-              <span>K</span>
-            </div>
-          </div>
-
-          {/* Clock */}
-          <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl glass-card border border-white/10 text-slate-300 font-mono text-xs whitespace-nowrap">
-            <Clock className="w-3.5 h-3.5 text-purple-400" />
-            <span className="font-bold text-white">{formattedTime}</span>
-            <span className="text-white/20">|</span>
-            <span className="text-[11px] text-slate-400 capitalize">{formattedDate}</span>
-          </div>
-        </div>
-
-        {/* Right: Badges, Theme Switcher & Profile */}
-        <div className="flex items-center gap-3">
-          {/* Streak pill */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
-            <Flame className="w-4 h-4 text-amber-400" />
-            <span>{displayStreak} ngày</span>
-          </div>
-
-          {/* XP pill */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">
-            <Star className="w-3.5 h-3.5 text-purple-400 fill-purple-400/40" />
-            <span>{Number(displayXp).toLocaleString()} XP</span>
-          </div>
-
-          {/* THEME TOGGLE BUTTON (Chuyển đổi Giao diện Sáng / Tối) */}
+        {/* 3. Góc phải: Nút Đổi giao diện, Toàn màn hình & Tài khoản */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Nút chuyển đổi Giao diện Sáng / Tối */}
           <button
             onClick={toggleTheme}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold transition-all duration-300 ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl glass-button text-xs font-semibold transition-all duration-200 cursor-pointer ${
               isDark 
-                ? 'text-amber-300 hover:text-amber-200 border-amber-500/30 bg-amber-500/10 shadow-sm shadow-amber-500/10' 
-                : 'text-indigo-600 hover:text-indigo-700 border-indigo-300/60 bg-white shadow-sm'
+                ? 'text-amber-300 hover:text-amber-200 border-amber-500/30 bg-amber-500/10' 
+                : 'text-indigo-600 hover:text-indigo-700 border-indigo-200 bg-white/90'
             }`}
-            title={isDark ? "Chuyển sang Giao diện Sáng (Light Mode)" : "Chuyển sang Giao diện Tối (Dark Mode)"}
+            title={isDark ? "Chuyển sang Giao diện Sáng" : "Chuyển sang Giao diện Tối"}
           >
             {isDark ? (
               <>
-                <Sun className="w-4 h-4 text-amber-400 animate-spin" style={{ animationDuration: '10s' }} />
-                <span className="hidden sm:inline">Giao diện Sáng</span>
+                <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '10s' }} />
+                <span className="hidden md:inline">Giao diện Sáng</span>
               </>
             ) : (
               <>
-                <Moon className="w-4 h-4 text-indigo-600" />
-                <span className="hidden sm:inline">Giao diện Tối</span>
+                <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="hidden md:inline">Giao diện Tối</span>
               </>
             )}
           </button>
 
-          {/* Fullscreen Toggle */}
+          {/* Nút bật / tắt toàn màn hình */}
           <button
             onClick={toggleFullscreen}
-            className="w-9 h-9 rounded-xl glass-button flex items-center justify-center text-slate-400 hover:text-white transition-all"
-            title="Bật/Tắt Toàn Màn Hình"
+            className="w-8 h-8 rounded-xl glass-button flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
           >
-            <Maximize2 className="w-4 h-4" />
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Notifications */}
-          <button
-            className="relative w-9 h-9 rounded-xl glass-button flex items-center justify-center text-slate-300 hover:text-white"
-            title="Thông báo bài tập"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-purple-400" />
-          </button>
-
-          {/* User Profile & Logout */}
-          <div className="flex items-center gap-2.5 pl-2 border-l border-white/10">
+          {/* Thông tin tài khoản người dùng */}
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-white/10">
             <img
               src={displayAvatar}
               alt={displayName}
-              className="w-9 h-9 rounded-xl object-cover border border-white/20"
+              className="w-8 h-8 rounded-xl object-cover border border-slate-200 dark:border-white/20 shadow-xs"
             />
-            <div className="text-left hidden md:block">
-              <div className="text-xs font-bold text-white font-display">
+            <div className="text-left hidden lg:block leading-tight">
+              <div className="text-xs font-bold text-slate-800 dark:text-white font-display truncate max-w-[120px]">
                 {displayName}
               </div>
-              <div className="text-[10px] text-purple-300">
+              <div className="text-[10px] text-indigo-600 dark:text-purple-300 truncate max-w-[120px]">
                 {displayTitle}
               </div>
             </div>
 
+            {/* Nút Đăng xuất */}
             {onLogout && (
               <button
                 onClick={onLogout}
-                className="ml-1 w-9 h-9 rounded-xl glass-button flex items-center justify-center text-rose-400 hover:text-rose-300 hover:border-rose-500/40 transition-all"
-                title="Đăng xuất khỏi hệ thống"
+                className="w-8 h-8 rounded-xl glass-button flex items-center justify-center text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-all cursor-pointer"
+                title="Đăng xuất"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
