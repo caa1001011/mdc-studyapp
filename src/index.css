@@ -5,12 +5,12 @@
     border-color: rgba(255, 255, 255, 0.08);
   }
   
-  body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  body, button, input, textarea, select {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   }
   
   h1, h2, h3, h4, h5, h6, .font-display {
-    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   }
 }
 
@@ -208,29 +208,92 @@ html:not(.dark) .bg-gradient-to-r.from-purple-600:hover {
     0 16px 32px -6px rgba(79, 70, 229, 0.45) !important;
 }
 
-html:not(.dark) .bg-gradient-to-r.from-purple-600 .text-white {
+/* ================= DARK MODE TYPOGRAPHY ================= */
+html.dark body {
+  color: #f1f5f9;
+}
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color: #ffffff;
+}
+
+html.dark .text-white {
   color: #ffffff !important;
 }
 
-/* 5. Typography: Sắc nét, tương phản cao */
-html:not(.dark) .text-white {
+html.dark .text-slate-100 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-200 {
+  color: #e2e8f0 !important;
+}
+
+html.dark .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+/* ================= LIGHT MODE TYPOGRAPHY (Chuẩn UI, tương phản cao, dễ nhìn) ================= */
+html:not(.dark) body {
+  color: #1e293b;
+}
+
+html:not(.dark) h1,
+html:not(.dark) h2,
+html:not(.dark) h3,
+html:not(.dark) h4,
+html:not(.dark) h5,
+html:not(.dark) h6 {
+  color: #0f172a;
+}
+
+/* Văn bản chính và phụ trên nền sáng */
+html:not(.dark) .text-slate-100 {
   color: #0f172a !important;
 }
 
-html:not(.dark) .text-slate-100 {
+html:not(.dark) .text-slate-200 {
   color: #1e293b !important;
 }
 
-html:not(.dark) .text-slate-200 {
-  color: #334155 !important;
-}
-
 html:not(.dark) .text-slate-300 {
-  color: #475569 !important;
+  color: #334155 !important;
 }
 
 html:not(.dark) .text-slate-400 {
   color: #64748b !important;
+}
+
+/* Các thành phần chữ trắng chung trên nền sáng (chuyển sang màu tối sắc nét) */
+html:not(.dark) .text-white {
+  color: #0f172a;
+}
+
+/* Bảo toàn 100% màu chữ TRẮNG trên các nút bấm có nền màu đậm hoặc gradient */
+html:not(.dark) button[class*="from-"],
+html:not(.dark) button[class*="from-"] *,
+html:not(.dark) button[class*="bg-indigo"],
+html:not(.dark) button[class*="bg-indigo"] *,
+html:not(.dark) button[class*="bg-purple"],
+html:not(.dark) button[class*="bg-purple"] *,
+html:not(.dark) button[class*="bg-emerald"],
+html:not(.dark) button[class*="bg-emerald"] *,
+html:not(.dark) button[class*="bg-rose"],
+html:not(.dark) button[class*="bg-rose"] *,
+html:not(.dark) [class*="bg-indigo-600"] *,
+html:not(.dark) [class*="bg-purple-600"] *,
+html:not(.dark) .bg-gradient-to-r *,
+html:not(.dark) .bg-gradient-to-tr * {
+  color: #ffffff !important;
 }
 
 /* Accents trong suốt kiểu Giọt Nước (Liquid Droplet Accents) */
