@@ -46,10 +46,10 @@ const DEFAULT_TIME_SLOTS = [
   { id: 'slot-3', name: 'Tiết 3', startTime: '09:05', endTime: '09:50', session: 'morning' },
   { id: 'slot-4', name: 'Tiết 4', startTime: '09:55', endTime: '10:40', session: 'morning' },
   { id: 'slot-5', name: 'Tiết 5', startTime: '10:45', endTime: '11:30', session: 'morning' },
-  { id: 'slot-6', name: 'Tiết 6 (Chiều)', startTime: '13:30', endTime: '14:15', session: 'afternoon' },
-  { id: 'slot-7', name: 'Tiết 7 (Chiều)', startTime: '14:20', endTime: '15:05', session: 'afternoon' },
-  { id: 'slot-8', name: 'Tiết 8 (Chiều)', startTime: '15:20', endTime: '16:05', session: 'afternoon' },
-  { id: 'slot-9', name: 'Ca Tối: Tự Học & Luyện Đề', startTime: '19:30', endTime: '21:30', session: 'evening' },
+  { id: 'slot-6', name: 'Tiết 6', startTime: '13:30', endTime: '14:15', session: 'afternoon' },
+  { id: 'slot-7', name: 'Tiết 7', startTime: '14:20', endTime: '15:05', session: 'afternoon' },
+  { id: 'slot-8', name: 'Tiết 8', startTime: '15:20', endTime: '16:05', session: 'afternoon' },
+  { id: 'slot-9', name: 'Ca Tối', startTime: '19:30', endTime: '21:30', session: 'evening' },
 ];
 
 // Default Initial Classes placed into the grid (Đã xóa toàn bộ dữ liệu mẫu)
@@ -59,7 +59,18 @@ export default function TimetableView() {
   // State for Time Slots
   const [timeSlots, setTimeSlots] = useState(() => {
     const saved = localStorage.getItem('lumina_time_slots');
-    return saved ? JSON.parse(saved) : DEFAULT_TIME_SLOTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((s) => ({
+          ...s,
+          name: s.name.replace(' (Chiều)', '').replace(': Tự Học & Luyện Đề', '')
+        }));
+      } catch (e) {
+        return DEFAULT_TIME_SLOTS;
+      }
+    }
+    return DEFAULT_TIME_SLOTS;
   });
 
   // State for Schedule entries in grid (xóa sạch toàn bộ dữ liệu cũ theo yêu cầu)
@@ -67,9 +78,6 @@ export default function TimetableView() {
     localStorage.removeItem('lumina_schedule_entries');
     return [];
   });
-
-  // Filter session (all, morning, afternoon, evening)
-  const [selectedSessionFilter, setSelectedSessionFilter] = useState('all');
 
   // Modal State: Add / Edit Time Slot
   const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
@@ -230,106 +238,47 @@ export default function TimetableView() {
     }
   };
 
-  // Filter time slots according to selected session
-  const filteredSlots = timeSlots.filter((slot) => {
-    if (selectedSessionFilter === 'all') return true;
-    return slot.session === selectedSessionFilter;
-  });
-
   // Helper to get color object
   const getColorObj = (colorId) => {
     return COLOR_THEMES.find((c) => c.id === colorId) || COLOR_THEMES[0];
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* 1. Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="space-y-5 pb-12">
+      {/* 1. Header & Controls - Nút "Thêm khung giờ mới" đưa lên hàng trên, xóa mô tả và session filter */}
+      <div className="flex items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-1.5">
             <CalendarDays className="w-3.5 h-3.5 text-cyan-300" />
             <span>Thời Khóa Biểu Tuần</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
             Bảng Thời Khóa Biểu
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Quản lý lịch học trên lớp, ca học thêm và tự do thêm khung giờ phù hợp
-          </p>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Session Filters */}
-          <div className="p-1 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center gap-1">
-            <button
-              onClick={() => setSelectedSessionFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                selectedSessionFilter === 'all'
-                  ? 'bg-purple-600/30 text-white border border-purple-400/50 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Cả Ngày ({timeSlots.length} khung giờ)
-            </button>
-            <button
-              onClick={() => setSelectedSessionFilter('morning')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 ${
-                selectedSessionFilter === 'morning'
-                  ? 'bg-amber-500/20 text-amber-200 border border-amber-400/50 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sun className="w-3 h-3 text-amber-400" />
-              <span>Sáng</span>
-            </button>
-            <button
-              onClick={() => setSelectedSessionFilter('afternoon')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 ${
-                selectedSessionFilter === 'afternoon'
-                  ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sunset className="w-3 h-3 text-cyan-400" />
-              <span>Chiều</span>
-            </button>
-            <button
-              onClick={() => setSelectedSessionFilter('evening')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 ${
-                selectedSessionFilter === 'evening'
-                  ? 'bg-purple-500/20 text-purple-200 border border-purple-400/50 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Moon className="w-3 h-3 text-purple-400" />
-              <span>Tối</span>
-            </button>
-          </div>
-
-          {/* Add Time Slot Button */}
-          <button
-            onClick={handleOpenAddSlot}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-600/30 hover:scale-[1.02] transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm Khung Giờ Mới</span>
-          </button>
-        </div>
+        {/* Add Time Slot Button - Nằm ở hàng trên cùng bên phải */}
+        <button
+          onClick={handleOpenAddSlot}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-600/30 hover:scale-[1.02] transition-all shrink-0 mt-1"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Thêm Khung Giờ Mới</span>
+        </button>
       </div>
 
       {/* 2. THE GRAND TIMETABLE MATRIX TABLE */}
       <div className="rounded-2xl glass-card border border-white/15 overflow-hidden shadow-2xl relative">
         <div className="overflow-x-auto scrollbar-none">
-          <table className="w-full border-collapse text-left min-w-[900px]">
+          <table className="w-full border-collapse text-left min-w-[850px]">
             {/* Table Header: Days of Week */}
             <thead>
               <tr className="border-b border-white/15 bg-white/[0.04]">
-                {/* Column 0: Time Frame header */}
-                <th className="py-2.5 px-3 w-36 font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
-                  <div className="flex items-center justify-between">
+                {/* Column 0: Time Frame header - Thu gọn & tự động co giãn theo nội dung */}
+                <th className="py-2.5 px-3 w-px whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span>Khung Giờ</span>
-                    <Clock className="w-3.5 h-3.5 text-purple-400" />
                   </div>
                 </th>
 
@@ -337,7 +286,7 @@ export default function TimetableView() {
                 {DAYS_OF_WEEK.map((day) => (
                   <th
                     key={day.index}
-                    className="py-2.5 px-2 font-display font-bold text-sm text-white border-r border-white/10 last:border-r-0 text-center min-w-[110px]"
+                    className="py-2.5 px-2 font-display font-bold text-sm text-white border-r border-white/10 last:border-r-0 text-center min-w-[100px]"
                   >
                     <div className="text-white font-extrabold tracking-wide">{day.label}</div>
                     <div className="text-[10px] text-purple-300/80 font-mono mt-0.5 font-normal">
@@ -350,18 +299,18 @@ export default function TimetableView() {
 
             {/* Table Body: Time Slot Rows */}
             <tbody className="divide-y divide-white/10">
-              {filteredSlots.map((slot) => {
+              {timeSlots.map((slot) => {
                 return (
                   <tr
                     key={slot.id}
                     className="group/row hover:bg-white/[0.02] transition-colors"
                   >
-                    {/* Sticky Left Column: Time Slot Info & Edit Controls */}
-                    <td className="py-2 px-3 sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
-                      <div className="flex items-center justify-between gap-1.5">
-                        <div className="min-w-0">
+                    {/* Sticky Left Column: Time Slot Info & Edit Controls - Tự động co giãn theo nội dung */}
+                    <td className="py-2 px-3 w-px whitespace-nowrap sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
+                      <div className="flex items-center justify-between gap-2.5">
+                        <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-display font-bold text-xs text-white truncate">
+                            <span className="font-display font-bold text-xs text-white">
                               {slot.name}
                             </span>
                             <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/[0.06] text-slate-400 uppercase tracking-wider font-semibold">
@@ -458,11 +407,11 @@ export default function TimetableView() {
           </table>
         </div>
 
-        {/* Empty state if user filtered out all slots */}
-        {filteredSlots.length === 0 && (
+        {/* Empty state if user deleted all slots */}
+        {timeSlots.length === 0 && (
           <div className="p-12 text-center text-slate-400">
             <Clock className="w-10 h-10 text-slate-500 mx-auto mb-2" />
-            <p className="text-sm font-semibold">Chưa có khung giờ nào cho buổi này</p>
+            <p className="text-sm font-semibold">Chưa có khung giờ nào trong thời khóa biểu</p>
             <button
               onClick={handleOpenAddSlot}
               className="mt-3 px-4 py-2 rounded-xl bg-purple-600/30 text-purple-200 text-xs font-bold border border-purple-400/40"
