@@ -159,7 +159,15 @@ export default function TimetableView({ currentUser: propsUser }) {
   // Open modal to add a brand new time slot
   const handleOpenAddSlot = () => {
     setEditingSlot(null);
-    setSlotName(`Tiết ${timeSlots.length + 1}`);
+    let nextNum = 1;
+    timeSlots.forEach((s) => {
+      const m = s.name.trim().match(/^Tiết\s*(\d+)/i);
+      if (m) {
+        const val = parseInt(m[1], 10);
+        if (val >= nextNum) nextNum = val + 1;
+      }
+    });
+    setSlotName(`Tiết ${nextNum}`);
     setSlotStartTime('16:15');
     setSlotEndTime('17:00');
     setSlotSession('afternoon');
@@ -206,10 +214,24 @@ export default function TimetableView({ currentUser: propsUser }) {
     setIsSlotModalOpen(false);
   };
 
-  // Delete Time Slot
+  // Delete Time Slot - Tự động sửa lại số thứ tự tiết học cho đúng thứ tự
   const handleDeleteSlot = (slotId) => {
     if (confirm('Bạn có chắc chắn muốn xóa khung thời gian này và toàn bộ các tiết học trong đó?')) {
-      setTimeSlots(timeSlots.filter((s) => s.id !== slotId));
+      const remainingSlots = timeSlots.filter((s) => s.id !== slotId);
+
+      // Đánh số lại các tiết học liên tiếp (Tiết 1, Tiết 2, Tiết 3...)
+      let periodCounter = 1;
+      const renumberedSlots = remainingSlots.map((s) => {
+        const trimmed = s.name.trim();
+        if (/^Tiết(\s*\d+)?/i.test(trimmed)) {
+          const newName = trimmed.replace(/^Tiết(\s*\d+)?/i, `Tiết ${periodCounter}`);
+          periodCounter++;
+          return { ...s, name: newName };
+        }
+        return s;
+      });
+
+      setTimeSlots(renumberedSlots);
       setScheduleEntries(scheduleEntries.filter((e) => e.slotId !== slotId));
       setHasUnsavedChanges(true);
     }
@@ -295,11 +317,8 @@ export default function TimetableView({ currentUser: propsUser }) {
         timeSlots,
         scheduleEntries
       });
+      // Chỉ làm mờ nút lưu theo đúng yêu cầu (không hiện thông báo che/đẩy giao diện)
       setHasUnsavedChanges(false);
-      setSaveStatus('success');
-      setTimeout(() => {
-        setSaveStatus(null);
-      }, 3500);
     } catch (error) {
       console.error('Lỗi lưu thời khóa biểu lên Firebase:', error);
       setSaveStatus('error');
@@ -327,21 +346,7 @@ export default function TimetableView({ currentUser: propsUser }) {
         </div>
 
         {/* Action Controls: Nút Lưu thời khóa biểu (Firebase) & Thêm Khung Giờ Mới */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {saveStatus === 'success' && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold animate-fadeIn">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Đã lưu lên đám mây cho @{username}</span>
-            </div>
-          )}
-
-          {saveStatus === 'error' && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold animate-fadeIn">
-              <X className="w-3.5 h-3.5 text-rose-400" />
-              <span>Lỗi lưu Firebase, đã lưu bản sao cục bộ</span>
-            </div>
-          )}
-
+        <div className="flex items-center gap-2.5 shrink-0">
           {/* Nút "Lưu thời khóa biểu": Mặc định mờ, khi có thay đổi thì sáng lên */}
           <button
             onClick={handleSaveTimetable}
@@ -478,7 +483,7 @@ export default function TimetableView({ currentUser: propsUser }) {
                                 {entry.subject}
                               </span>
                               {entry.notes && (
-                                <span className="text-[9px] text-slate-300/80 italic truncate max-w-full block">
+                                <span className="text-[10px] font-semibold text-slate-800 dark:text-slate-100 px-1.5 py-0.5 rounded-md bg-black/[0.06] dark:bg-white/10 truncate max-w-full block leading-none mt-0.5">
                                   {entry.notes}
                                 </span>
                               )}
