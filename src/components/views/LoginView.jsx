@@ -45,17 +45,13 @@ export default function LoginView({ onLoginSuccess }) {
   return (
     <div className="min-h-screen w-full bg-[#f8fafc] flex flex-col justify-between items-center px-4 py-8 select-none">
       <div className="w-full flex-1 flex flex-col items-center justify-center max-w-lg mx-auto">
-        {/* 1. Logo trường học tròn chuẩn ở vị trí trung tâm phía trên */}
+        {/* 1. Logo Beacon Learn chính thức của dự án (giống trang chủ) */}
         <div className="mb-4 flex flex-col items-center">
-          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden flex items-center justify-center p-1 bg-white shadow-sm border border-slate-100">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden flex items-center justify-center p-1 bg-white shadow-md border border-slate-200/80">
             <img
-              src="/school-logo.png"
-              alt="Huy hiệu Trường THCS Lê Anh Xuân"
-              className="w-full h-full object-contain"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = '/logo.png';
-              }}
+              src="/logo.png"
+              alt="Beacon Learn Logo"
+              className="w-full h-full object-cover rounded-2xl"
             />
           </div>
 
@@ -63,7 +59,7 @@ export default function LoginView({ onLoginSuccess }) {
             Đăng nhập ứng dụng
           </h1>
           <p className="mt-1 text-sm font-medium text-slate-500 text-center">
-            Quản lý học sinh - THCS Lê Anh Xuân
+            Beacon Learn — Ứng Dụng Tự Học & Luyện Thi THPT
           </p>
         </div>
 
@@ -165,9 +161,9 @@ export default function LoginView({ onLoginSuccess }) {
         </div>
       </div>
 
-      {/* 3. Chân trang Footer đồng bộ */}
+      {/* 3. Chân trang Footer Beacon Learn */}
       <footer className="mt-8 text-center text-xs text-slate-400 font-mono">
-        © 2026 THCS Lê Anh Xuân. All rights reserved.
+        © 2026 Beacon Learn. All rights reserved.
       </footer>
     </div>
   );
