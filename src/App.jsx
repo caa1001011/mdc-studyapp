@@ -4,7 +4,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import PageLoading from './components/PageLoading';
 import LoginView from './components/views/LoginView';
-import { clearSessionUser, ensureAdminAccount } from './services/authService';
+import { getSessionUser, saveSessionUser, clearSessionUser, ensureAdminAccount } from './services/authService';
 
 // Code Splitting / Lazy Loading: Mỗi phân hệ là 1 file riêng biệt
 const DashboardView = lazy(() => import('./components/views/DashboardView'));
@@ -17,8 +17,8 @@ const GamificationView = lazy(() => import('./components/views/GamificationView'
 const UserManagementView = lazy(() => import('./components/views/UserManagementView'));
 
 export default function App() {
-  // Khi mở web app, trang đăng nhập luôn xuất hiện đầu tiên (currentUser = null)
-  const [currentUser, setCurrentUser] = useState(null);
+  // Duy trì trạng thái đăng nhập: Khi refresh trang sẽ giữ nguyên tài khoản, chỉ đăng xuất khi bấm nút Đăng xuất
+  const [currentUser, setCurrentUser] = useState(() => getSessionUser());
   const [activeTab, setActiveTab] = useState('dashboard');
 
   // Theme State cho Trang Chủ sau khi đăng nhập: 'dark' (mặc định) hoặc 'light'
@@ -58,6 +58,7 @@ export default function App() {
   }, [activeTab, currentUser]);
 
   const handleLoginSuccess = (userData) => {
+    saveSessionUser(userData);
     setCurrentUser(userData);
     setActiveTab('dashboard');
   };
