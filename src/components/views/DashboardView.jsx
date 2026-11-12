@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Circle,
   Crown,
-  Timer
+  Timer,
+  Users
 } from 'lucide-react';
 import {
   USER_PROFILE,
@@ -25,10 +26,13 @@ import {
   LEADERBOARD_USERS
 } from '../../data/mockData';
 
-export default function DashboardView({ setActiveTab }) {
+export default function DashboardView({ setActiveTab, currentUser }) {
   const [tasks, setTasks] = useState(HOMEWORK_TASKS);
   const [isQuickPomoRunning, setIsQuickPomoRunning] = useState(false);
   const [quickPomoSeconds, setQuickPomoSeconds] = useState(25 * 60);
+
+  const displayName = currentUser?.fullName || currentUser?.username || USER_PROFILE.name;
+  const isAdmin = currentUser?.role === 'admin';
 
   const todayClasses = TIMETABLE_DATA.filter((item) => item.dayIndex === 1);
 
@@ -59,7 +63,7 @@ export default function DashboardView({ setActiveTab }) {
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-extrabold font-display tracking-tight text-white leading-tight">
-              Chào buổi tối, <span className="shimmer-text">{USER_PROFILE.name}</span> ✨
+              Chào mừng trở lại, <span className="shimmer-text">{displayName}</span> ✨
             </h1>
 
             <p className="mt-2.5 text-sm sm:text-base text-slate-300 italic leading-relaxed font-light">
@@ -71,7 +75,17 @@ export default function DashboardView({ setActiveTab }) {
           </div>
 
           {/* Quick Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab('users')}
+                className="flex items-center gap-2.5 px-5 py-3.5 rounded-2xl glass-button text-amber-300 hover:text-amber-200 border border-amber-500/40 font-bold text-sm transition-all"
+              >
+                <Users className="w-4 h-4 text-amber-400" />
+                <span>Quản Lý Tài Khoản</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('pomodoro')}
               className="flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-sm shadow-xl shadow-purple-600/35 hover:scale-[1.02] transition-all"

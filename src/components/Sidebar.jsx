@@ -10,7 +10,8 @@ import {
   Sparkles,
   Music,
   Play,
-  Pause
+  Pause,
+  Users
 } from 'lucide-react';
 import { USER_PROFILE } from '../data/mockData';
 
@@ -24,9 +25,18 @@ export const NAV_ITEMS = [
   { id: 'games', label: 'Trò Chơi Học Tập', icon: Gamepad2, badge: '+100 XP' },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab }) {
+export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const percentCompleted = Math.round((USER_PROFILE.todayStudyMinutes / USER_PROFILE.dailyGoalMinutes) * 100);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  const menuItems = isAdmin
+    ? [
+        ...NAV_ITEMS,
+        { id: 'users', label: 'Quản Lý Tài Khoản', icon: Users, badge: 'Admin' },
+      ]
+    : NAV_ITEMS;
 
   const weekDots = [
     { day: 'T2', active: true },
@@ -44,10 +54,12 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       <div className="space-y-1.5">
         <div className="px-3 pb-2 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
           <span>Danh Mục Tự Học</span>
-          <span className="text-[10px] text-purple-300 font-mono">Lớp 12</span>
+          <span className="text-[10px] text-purple-300 font-mono">
+            {isAdmin ? 'Quản Trị' : 'Lớp 12'}
+          </span>
         </div>
 
-        {NAV_ITEMS.map((item) => {
+        {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
 
@@ -82,7 +94,9 @@ export default function Sidebar({ activeTab, setActiveTab }) {
               {item.badge && (
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    isActive
+                    item.id === 'users'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                      : isActive
                       ? 'bg-purple-400/20 text-purple-200 border-purple-400/30'
                       : 'bg-white/[0.04] text-slate-400 border-white/10 group-hover:border-white/20'
                   }`}

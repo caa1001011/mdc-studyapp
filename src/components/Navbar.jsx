@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Sparkles,
   Flame,
   Star,
   Bell,
@@ -9,11 +8,12 @@ import {
   Maximize2,
   Command,
   Sun,
-  Moon
+  Moon,
+  LogOut
 } from 'lucide-react';
 import { USER_PROFILE } from '../data/mockData';
 
-export default function Navbar({ activeTab, theme, setTheme }) {
+export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogout }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -52,6 +52,11 @@ export default function Navbar({ activeTab, theme, setTheme }) {
   });
 
   const isDark = theme === 'dark';
+  const displayName = currentUser?.fullName || currentUser?.username || USER_PROFILE.name;
+  const displayTitle = currentUser?.title || USER_PROFILE.title;
+  const displayAvatar = currentUser?.avatar || USER_PROFILE.avatar;
+  const displayStreak = currentUser?.streakDays ?? USER_PROFILE.streakDays;
+  const displayXp = currentUser?.xp ?? USER_PROFILE.xp;
 
   return (
     <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-6 lg:px-10 py-3 transition-all">
@@ -109,15 +114,15 @@ export default function Navbar({ activeTab, theme, setTheme }) {
         {/* Right: Badges, Theme Switcher & Profile */}
         <div className="flex items-center gap-3">
           {/* Streak pill */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
             <Flame className="w-4 h-4 text-amber-400" />
-            <span>{USER_PROFILE.streakDays} ngày</span>
+            <span>{displayStreak} ngày</span>
           </div>
 
           {/* XP pill */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">
             <Star className="w-3.5 h-3.5 text-purple-400 fill-purple-400/40" />
-            <span>{USER_PROFILE.xp.toLocaleString()} XP</span>
+            <span>{Number(displayXp).toLocaleString()} XP</span>
           </div>
 
           {/* THEME TOGGLE BUTTON (Chuyển đổi Giao diện Sáng / Tối) */}
@@ -161,21 +166,31 @@ export default function Navbar({ activeTab, theme, setTheme }) {
             <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-purple-400" />
           </button>
 
-          {/* User Profile */}
+          {/* User Profile & Logout */}
           <div className="flex items-center gap-2.5 pl-2 border-l border-white/10">
             <img
-              src={USER_PROFILE.avatar}
-              alt={USER_PROFILE.name}
+              src={displayAvatar}
+              alt={displayName}
               className="w-9 h-9 rounded-xl object-cover border border-white/20"
             />
-            <div className="text-left">
+            <div className="text-left hidden md:block">
               <div className="text-xs font-bold text-white font-display">
-                {USER_PROFILE.name}
+                {displayName}
               </div>
               <div className="text-[10px] text-purple-300">
-                {USER_PROFILE.title}
+                {displayTitle}
               </div>
             </div>
+
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="ml-1 w-9 h-9 rounded-xl glass-button flex items-center justify-center text-rose-400 hover:text-rose-300 hover:border-rose-500/40 transition-all"
+                title="Đăng xuất khỏi hệ thống"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

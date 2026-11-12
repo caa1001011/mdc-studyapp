@@ -20,6 +20,7 @@ export default defineConfig({
           if (id.includes('QuizReviewView')) return 'view-quiz';
           if (id.includes('PomodoroView')) return 'view-pomodoro';
           if (id.includes('GamificationView')) return 'view-gamification';
+          if (id.includes('UserManagementView')) return 'view-users';
           if (id.includes('node_modules')) return 'vendor';
         },
       },
