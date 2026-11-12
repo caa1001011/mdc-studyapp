@@ -52,34 +52,8 @@ const DEFAULT_TIME_SLOTS = [
   { id: 'slot-9', name: 'Ca Tối: Tự Học & Luyện Đề', startTime: '19:30', endTime: '21:30', session: 'evening' },
 ];
 
-// Default Initial Classes placed into the grid
-const DEFAULT_SCHEDULE_ENTRIES = [
-  { id: 'entry-1', slotId: 'slot-1', dayIndex: 1, subject: 'Toán Cao Cấp', room: 'A.302', teacher: 'ThS. Hoàng Nam', color: 'purple', notes: 'Đạo hàm & Vi phân' },
-  { id: 'entry-2', slotId: 'slot-2', dayIndex: 1, subject: 'Toán Cao Cấp', room: 'A.302', teacher: 'ThS. Hoàng Nam', color: 'purple', notes: 'Luyện đề giải tích' },
-  { id: 'entry-3', slotId: 'slot-3', dayIndex: 1, subject: 'Vật Lý Đại Cương', room: 'Lab B.104', teacher: 'TS. Nguyễn Minh', color: 'cyan', notes: 'Dao động con lắc' },
-  { id: 'entry-4', slotId: 'slot-4', dayIndex: 1, subject: 'Vật Lý Đại Cương', room: 'Lab B.104', teacher: 'TS. Nguyễn Minh', color: 'cyan', notes: 'Thí nghiệm thực hành' },
-  { id: 'entry-5', slotId: 'slot-6', dayIndex: 1, subject: 'IELTS Academic', room: 'Online Zoom', teacher: 'Ms. Jessica', color: 'amber', notes: 'Speaking Task 2' },
-  { id: 'entry-6', slotId: 'slot-9', dayIndex: 1, subject: 'Pomodoro Tự Học Đêm', room: 'Góc học tập', teacher: 'Tự học', color: 'rose', notes: 'Ôn 50 thẻ Flashcard' },
-
-  { id: 'entry-7', slotId: 'slot-1', dayIndex: 2, subject: 'Hóa Học Hữu Cơ', room: 'C.201', teacher: 'TS. Thu Hà', color: 'emerald', notes: 'Phản ứng Este hóa' },
-  { id: 'entry-8', slotId: 'slot-2', dayIndex: 2, subject: 'Hóa Học Hữu Cơ', room: 'C.201', teacher: 'TS. Thu Hà', color: 'emerald', notes: 'Đồng phân' },
-  { id: 'entry-9', slotId: 'slot-3', dayIndex: 2, subject: 'Ngữ Văn 12', room: 'B.405', teacher: 'ThS. Thu Nga', color: 'rose', notes: 'Nghị luận xã hội' },
-  { id: 'entry-10', slotId: 'slot-7', dayIndex: 2, subject: 'Lập Trình Web React', room: 'Lab Tin 2', teacher: 'ThS. Vũ Đức', color: 'blue', notes: 'Xây dựng UI App' },
-
-  { id: 'entry-11', slotId: 'slot-2', dayIndex: 3, subject: 'Tiếng Anh C1', room: 'A.101', teacher: 'Mr. David', color: 'amber', notes: 'Writing Task 2' },
-  { id: 'entry-12', slotId: 'slot-4', dayIndex: 3, subject: 'Lịch Sử Văn Minh', room: 'Hội trường', teacher: 'GS. Quang', color: 'cyan', notes: 'Thời kỳ Phục Hưng' },
-  { id: 'entry-13', slotId: 'slot-9', dayIndex: 3, subject: 'Giải Đề Thi Thử', room: 'Phòng học', teacher: 'Tự học', color: 'purple', notes: 'Đề Toán số 4' },
-
-  { id: 'entry-14', slotId: 'slot-1', dayIndex: 4, subject: 'Toán Hình Không Gian', room: 'A.302', teacher: 'ThS. Hoàng Nam', color: 'purple', notes: 'Thể tích khối đa diện' },
-  { id: 'entry-15', slotId: 'slot-3', dayIndex: 4, subject: 'Sinh Học Phân Tử', room: 'B.202', teacher: 'Cô Lan', color: 'emerald', notes: 'Phiên mã & dịch mã' },
-  { id: 'entry-16', slotId: 'slot-8', dayIndex: 4, subject: 'Thể Dục & Thể Thao', room: 'Sân bóng', teacher: 'Thầy Hùng', color: 'amber', notes: 'Bóng rổ' },
-
-  { id: 'entry-17', slotId: 'slot-1', dayIndex: 5, subject: 'Vật Lý Hạt Nhân', room: 'B.104', teacher: 'TS. Nguyễn Minh', color: 'cyan', notes: 'Phóng xạ & chu kỳ bán rã' },
-  { id: 'entry-18', slotId: 'slot-3', dayIndex: 5, subject: 'IELTS Mock Test', room: 'Online Zoom', teacher: 'Ms. Jessica', color: 'amber', notes: 'Listening & Reading' },
-  { id: 'entry-19', slotId: 'slot-6', dayIndex: 5, subject: 'Sinh Hoạt Lớp', room: 'A.302', teacher: 'ThS. Hoàng Nam', color: 'purple', notes: 'Tổng kết tuần' },
-
-  { id: 'entry-20', slotId: 'slot-9', dayIndex: 6, subject: 'Chiến Binh Pomodoro', room: 'Phòng riêng', teacher: 'Tự học', color: 'rose', notes: 'Chinh phục 100 Flashcard' },
-];
+// Default Initial Classes placed into the grid (Đã xóa toàn bộ dữ liệu mẫu)
+const DEFAULT_SCHEDULE_ENTRIES = [];
 
 export default function TimetableView() {
   // State for Time Slots
@@ -88,10 +62,10 @@ export default function TimetableView() {
     return saved ? JSON.parse(saved) : DEFAULT_TIME_SLOTS;
   });
 
-  // State for Schedule entries in grid
+  // State for Schedule entries in grid (xóa sạch toàn bộ dữ liệu cũ theo yêu cầu)
   const [scheduleEntries, setScheduleEntries] = useState(() => {
-    const saved = localStorage.getItem('lumina_schedule_entries');
-    return saved ? JSON.parse(saved) : DEFAULT_SCHEDULE_ENTRIES;
+    localStorage.removeItem('lumina_schedule_entries');
+    return [];
   });
 
   // Filter session (all, morning, afternoon, evening)
@@ -345,14 +319,14 @@ export default function TimetableView() {
       </div>
 
       {/* 2. THE GRAND TIMETABLE MATRIX TABLE */}
-      <div className="rounded-3xl glass-card border border-white/15 overflow-hidden shadow-2xl relative">
+      <div className="rounded-2xl glass-card border border-white/15 overflow-hidden shadow-2xl relative">
         <div className="overflow-x-auto scrollbar-none">
-          <table className="w-full border-collapse text-left min-w-[1000px]">
+          <table className="w-full border-collapse text-left min-w-[900px]">
             {/* Table Header: Days of Week */}
             <thead>
               <tr className="border-b border-white/15 bg-white/[0.04]">
                 {/* Column 0: Time Frame header */}
-                <th className="p-4 w-44 font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
+                <th className="py-2.5 px-3 w-36 font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
                   <div className="flex items-center justify-between">
                     <span>Khung Giờ</span>
                     <Clock className="w-3.5 h-3.5 text-purple-400" />
@@ -363,7 +337,7 @@ export default function TimetableView() {
                 {DAYS_OF_WEEK.map((day) => (
                   <th
                     key={day.index}
-                    className="p-4 font-display font-bold text-sm text-white border-r border-white/10 last:border-r-0 text-center min-w-[130px]"
+                    className="py-2.5 px-2 font-display font-bold text-sm text-white border-r border-white/10 last:border-r-0 text-center min-w-[110px]"
                   >
                     <div className="text-white font-extrabold tracking-wide">{day.label}</div>
                     <div className="text-[10px] text-purple-300/80 font-mono mt-0.5 font-normal">
@@ -383,34 +357,36 @@ export default function TimetableView() {
                     className="group/row hover:bg-white/[0.02] transition-colors"
                   >
                     {/* Sticky Left Column: Time Slot Info & Edit Controls */}
-                    <td className="p-3 sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="font-display font-bold text-xs text-white block">
-                            {slot.name}
-                          </span>
-                          <span className="text-[11px] font-mono text-purple-300 block mt-0.5">
+                    <td className="py-2 px-3 sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-display font-bold text-xs text-white truncate">
+                              {slot.name}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/[0.06] text-slate-400 uppercase tracking-wider font-semibold">
+                              {slot.session === 'morning' && 'Sáng'}
+                              {slot.session === 'afternoon' && 'Chiều'}
+                              {slot.session === 'evening' && 'Tối'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-purple-300 block mt-0.5">
                             {slot.startTime} - {slot.endTime}
-                          </span>
-                          <span className="inline-block mt-1 text-[9px] px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-400 uppercase tracking-wider font-semibold">
-                            {slot.session === 'morning' && 'Sáng'}
-                            {slot.session === 'afternoon' && 'Chiều'}
-                            {slot.session === 'evening' && 'Tối'}
                           </span>
                         </div>
 
                         {/* Slot Action buttons (appear on hover) */}
-                        <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
                           <button
                             onClick={() => handleOpenEditSlot(slot)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-white/[0.08]"
+                            className="p-1 rounded-md text-slate-400 hover:text-purple-300 hover:bg-white/[0.08]"
                             title="Chỉnh sửa khung giờ này"
                           >
                             <Edit2 className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => handleDeleteSlot(slot.id)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/[0.08]"
+                            className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-white/[0.08]"
                             title="Xóa khung giờ này"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -430,19 +406,19 @@ export default function TimetableView() {
                         <td
                           key={day.index}
                           onClick={() => handleCellClick(slot.id, day.index)}
-                          className="p-2 border-r border-white/10 last:border-r-0 align-top cursor-pointer transition-all hover:bg-white/[0.03] group/cell relative"
+                          className="p-1.5 border-r border-white/10 last:border-r-0 align-top cursor-pointer transition-all hover:bg-white/[0.03] group/cell relative"
                         >
                           {entry ? (
-                            /* Filled Class Cell (Translucent Crystal Gem) */
+                            /* Filled Class Cell (Compact Translucent Crystal Gem) */
                             <div
-                              className={`w-full h-full min-h-[76px] rounded-2xl p-2.5 border transition-all duration-200 flex flex-col justify-between ${theme.bg} ${theme.border} ${theme.glow} shadow-md group-hover/cell:scale-[1.02]`}
+                              className={`w-full min-h-[46px] rounded-xl p-2 border transition-all duration-200 flex flex-col justify-between ${theme.bg} ${theme.border} ${theme.glow} shadow-sm group-hover/cell:scale-[1.01]`}
                             >
                               <div>
                                 <span className={`text-xs font-bold font-display line-clamp-1 ${theme.text}`}>
                                   {entry.subject}
                                 </span>
 
-                                <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-300">
+                                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-300">
                                   {entry.room && (
                                     <span className="flex items-center gap-1">
                                       <MapPin className="w-2.5 h-2.5 text-cyan-300" />
@@ -458,16 +434,16 @@ export default function TimetableView() {
                               </div>
 
                               {entry.notes && (
-                                <p className="text-[9px] text-slate-300/80 italic mt-1 truncate">
+                                <p className="text-[9px] text-slate-300/80 italic mt-0.5 truncate">
                                   {entry.notes}
                                 </p>
                               )}
                             </div>
                           ) : (
-                            /* Empty Cell with subtle '+' on hover */
-                            <div className="w-full h-full min-h-[76px] rounded-2xl border border-dashed border-white/5 group-hover/cell:border-purple-400/40 group-hover/cell:bg-purple-500/[0.05] transition-all flex flex-col items-center justify-center text-slate-600 group-hover/cell:text-purple-300">
-                              <Plus className="w-4 h-4 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
-                              <span className="text-[10px] opacity-0 group-hover/cell:opacity-100 transition-opacity mt-0.5">
+                            /* Empty Cell (Compact with subtle '+' on hover) */
+                            <div className="w-full h-[46px] rounded-xl border border-dashed border-white/10 group-hover/cell:border-purple-400/40 group-hover/cell:bg-purple-500/[0.05] transition-all flex items-center justify-center gap-1 text-slate-500 group-hover/cell:text-purple-300">
+                              <Plus className="w-3.5 h-3.5 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
+                              <span className="text-[10px] opacity-0 group-hover/cell:opacity-100 transition-opacity">
                                 Thêm môn
                               </span>
                             </div>
