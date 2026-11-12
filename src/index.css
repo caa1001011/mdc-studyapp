@@ -288,11 +288,7 @@ html:not(.dark) button[class*="bg-purple"] *,
 html:not(.dark) button[class*="bg-emerald"],
 html:not(.dark) button[class*="bg-emerald"] *,
 html:not(.dark) button[class*="bg-rose"],
-html:not(.dark) button[class*="bg-rose"] *,
-html:not(.dark) [class*="bg-indigo-600"] *,
-html:not(.dark) [class*="bg-purple-600"] *,
-html:not(.dark) .bg-gradient-to-r *,
-html:not(.dark) .bg-gradient-to-tr * {
+html:not(.dark) button[class*="bg-rose"] * {
   color: #ffffff !important;
 }
 

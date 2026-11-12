@@ -84,16 +84,27 @@ export default function LoginView({ onLoginSuccess }) {
             />
           </div>
 
-          <h1 className="mt-4 text-2xl sm:text-[26px] font-bold text-slate-900 tracking-tight text-center font-display">
+          <h1
+            className="mt-4 text-2xl sm:text-[26px] font-bold tracking-tight text-center font-display"
+            style={{ color: '#0f172a' }}
+          >
             Đăng nhập ứng dụng
           </h1>
-          <p className="mt-1 text-sm font-medium text-slate-600 text-center">
+          <p
+            className="mt-1 text-sm font-medium text-center"
+            style={{ color: '#475569' }}
+          >
             Beacon Learn — Ứng Dụng Tự Học & Luyện Thi THPT
           </p>
         </div>
 
         {/* 2. Khung đăng nhập trung tâm với viền Gradient đa sắc nổi bật */}
-        <div className="w-full max-w-[420px] p-[2.5px] rounded-[26px] bg-gradient-to-tr from-orange-500 via-amber-400 via-emerald-400 to-cyan-400 shadow-xl shadow-slate-300/50">
+        <div
+          className="w-full max-w-[420px] p-[2.5px] rounded-[26px] shadow-xl shadow-slate-300/60"
+          style={{
+            background: 'linear-gradient(135deg, #f97316 0%, #fbbf24 35%, #10b981 70%, #06b6d4 100%)'
+          }}
+        >
           <div className="w-full bg-white rounded-[24px] p-6 sm:p-8">
             {/* Thông báo lỗi nếu có */}
             {errorMsg && (
@@ -106,7 +117,10 @@ export default function LoginView({ onLoginSuccess }) {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Trường TÀI KHOẢN */}
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                <label
+                  className="block text-xs font-bold uppercase tracking-wider mb-2"
+                  style={{ color: '#1e293b' }}
+                >
                   TÀI KHOẢN
                 </label>
                 <div className="relative">
@@ -120,14 +134,18 @@ export default function LoginView({ onLoginSuccess }) {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Nhập tên đăng nhập"
-                    className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-xl border-2 border-emerald-500 text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30 transition-all"
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', borderColor: '#10b981' }}
+                    className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-xl border-2 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30 transition-all"
                   />
                 </div>
               </div>
 
               {/* Trường MẬT KHẨU */}
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                <label
+                  className="block text-xs font-bold uppercase tracking-wider mb-2"
+                  style={{ color: '#1e293b' }}
+                >
                   MẬT KHẨU
                 </label>
                 <div className="relative">
@@ -141,7 +159,8 @@ export default function LoginView({ onLoginSuccess }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Nhập mật khẩu"
-                    className="w-full pl-10 pr-10 py-2.5 sm:py-3 rounded-xl border-2 border-emerald-500 text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30 transition-all"
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', borderColor: '#10b981' }}
+                    className="w-full pl-10 pr-10 py-2.5 sm:py-3 rounded-xl border-2 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30 transition-all"
                   />
                   <button
                     type="button"
@@ -158,7 +177,8 @@ export default function LoginView({ onLoginSuccess }) {
               <div className="flex items-center pt-1">
                 <label
                   htmlFor="rememberMeLogin"
-                  className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-700 font-medium select-none"
+                  className="flex items-center gap-2.5 cursor-pointer text-xs font-medium select-none"
+                  style={{ color: '#334155' }}
                 >
                   <input
                     id="rememberMeLogin"
@@ -167,25 +187,25 @@ export default function LoginView({ onLoginSuccess }) {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
                   />
-                  <span>Ghi nhớ tên đăng nhập và mật khẩu</span>
+                  <span style={{ color: '#334155' }}>Ghi nhớ tên đăng nhập và mật khẩu</span>
                 </label>
               </div>
 
-              {/* Nút Đăng Nhập - Chữ trắng tinh khôi, tương phản cao trên nền tím xanh */}
+              {/* Nút Đăng Nhập - Nền xanh tím nổi bật, chữ trắng tinh khôi */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-4 py-3.5 px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-sm font-bold tracking-wide shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:pointer-events-none"
+                className="w-full mt-4 py-3.5 px-5 rounded-2xl text-sm font-bold tracking-wide shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:pointer-events-none hover:opacity-95 active:scale-[0.99]"
                 style={{ backgroundColor: '#4f46e5', color: '#ffffff' }}
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#ffffff' }} />
-                    <span style={{ color: '#ffffff' }} className="text-white font-bold">Đang xác thực...</span>
+                    <span style={{ color: '#ffffff' }}>Đang xác thực...</span>
                   </>
                 ) : (
                   <>
-                    <span style={{ color: '#ffffff' }} className="text-white font-bold">Đăng Nhập</span>
+                    <span style={{ color: '#ffffff' }}>Đăng Nhập</span>
                     <ArrowRight className="w-4 h-4" style={{ color: '#ffffff' }} />
                   </>
                 )}
@@ -196,7 +216,7 @@ export default function LoginView({ onLoginSuccess }) {
       </div>
 
       {/* 3. Chân trang Footer rõ nét */}
-      <footer className="mt-8 text-center text-xs text-slate-500 font-mono">
+      <footer className="mt-8 text-center text-xs font-mono" style={{ color: '#64748b' }}>
         © 2026 Beacon Learn. All rights reserved.
       </footer>
     </div>
