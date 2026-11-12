@@ -377,10 +377,10 @@ html:not(.dark) .border-white\/5 {
 
 html:not(.dark) input,
 html:not(.dark) textarea {
-  color: #0f172a !important;
-  background: rgba(255, 255, 255, 0.75) !important;
-  border: 1px solid #cbd5e1 !important;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 html:not(.dark) input:focus,
