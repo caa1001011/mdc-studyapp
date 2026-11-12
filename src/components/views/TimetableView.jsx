@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  CalendarDays,
   Plus,
   Clock,
-  MapPin,
-  User,
-  FileText,
   Trash2,
   Edit2,
   X,
@@ -112,8 +108,6 @@ export default function TimetableView({ currentUser: propsUser }) {
   const [isCellModalOpen, setIsCellModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null); // { slotId, dayIndex, existingEntry }
   const [cellSubject, setCellSubject] = useState('');
-  const [cellRoom, setCellRoom] = useState('');
-  const [cellTeacher, setCellTeacher] = useState('');
   const [cellColor, setCellColor] = useState('purple');
   const [cellNotes, setCellNotes] = useState('');
 
@@ -231,14 +225,10 @@ export default function TimetableView({ currentUser: propsUser }) {
 
     if (existing) {
       setCellSubject(existing.subject);
-      setCellRoom(existing.room || '');
-      setCellTeacher(existing.teacher || '');
       setCellColor(existing.color || 'purple');
       setCellNotes(existing.notes || '');
     } else {
       setCellSubject('');
-      setCellRoom('A.302');
-      setCellTeacher('');
       setCellColor('purple');
       setCellNotes('');
     }
@@ -261,8 +251,6 @@ export default function TimetableView({ currentUser: propsUser }) {
             ? {
                 ...item,
                 subject: cellSubject,
-                room: cellRoom,
-                teacher: cellTeacher,
                 color: cellColor,
                 notes: cellNotes,
               }
@@ -276,8 +264,6 @@ export default function TimetableView({ currentUser: propsUser }) {
         slotId,
         dayIndex,
         subject: cellSubject,
-        room: cellRoom,
-        teacher: cellTeacher,
         color: cellColor,
         notes: cellNotes,
       };
@@ -335,10 +321,6 @@ export default function TimetableView({ currentUser: propsUser }) {
       {/* 1. Header & Controls - Đổi tên thành "Thời khóa biểu cá nhân" và tích hợp nút Lưu Firebase */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-1.5">
-            <CalendarDays className="w-3.5 h-3.5 text-cyan-300" />
-            <span>Thời Khóa Biểu Tuần</span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
             Thời khóa biểu cá nhân
           </h1>
@@ -407,23 +389,20 @@ export default function TimetableView({ currentUser: propsUser }) {
             <thead>
               <tr className="border-b border-white/15 bg-white/[0.04]">
                 {/* Column 0: Time Frame header - Thu gọn & tự động co giãn theo nội dung */}
-                <th className="py-2.5 px-3 w-px whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
+                <th className="py-3 px-3.5 w-px whitespace-nowrap font-display font-bold text-xs sm:text-sm uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
                   <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <Clock className="w-4 h-4 text-purple-400 shrink-0" />
                     <span>Khung Giờ</span>
                   </div>
                 </th>
 
-                {/* Days 1 to 7 */}
+                {/* Days 1 to 7 - Căn chỉnh các thứ to rõ, dễ nhìn, xóa bộ đếm số môn học */}
                 {DAYS_OF_WEEK.map((day) => (
                   <th
                     key={day.index}
-                    className="py-2.5 px-2 font-display font-bold text-sm text-white border-r border-white/10 last:border-r-0 text-center min-w-[100px]"
+                    className="py-3 px-3 font-display font-bold text-sm sm:text-base text-white border-r border-white/10 last:border-r-0 text-center min-w-[105px]"
                   >
-                    <div className="text-white font-extrabold tracking-wide">{day.label}</div>
-                    <div className="text-[10px] text-purple-300/80 font-mono mt-0.5 font-normal">
-                      {scheduleEntries.filter((e) => e.dayIndex === day.index).length} môn học
-                    </div>
+                    <span className="tracking-wide">{day.label}</span>
                   </th>
                 ))}
               </tr>
@@ -490,34 +469,18 @@ export default function TimetableView({ currentUser: propsUser }) {
                           className="p-1.5 border-r border-white/10 last:border-r-0 align-top cursor-pointer transition-all hover:bg-white/[0.03] group/cell relative"
                         >
                           {entry ? (
-                            /* Filled Class Cell (Compact Translucent Crystal Gem) */
+                            /* Filled Class Cell: Căn chỉnh tên môn học cân đối ở giữa, không có biểu tượng vị trí */
                             <div
-                              className={`w-full min-h-[46px] rounded-xl p-2 border transition-all duration-200 flex flex-col justify-between ${theme.bg} ${theme.border} ${theme.glow} shadow-sm group-hover/cell:scale-[1.01]`}
+                              title={entry.notes ? `${entry.subject} (${entry.notes})` : entry.subject}
+                              className={`w-full h-[46px] rounded-xl px-2.5 py-1 border transition-all duration-200 flex flex-col items-center justify-center text-center ${theme.bg} ${theme.border} ${theme.glow} shadow-sm group-hover/cell:scale-[1.02]`}
                             >
-                              <div>
-                                <span className={`text-xs font-bold font-display line-clamp-1 ${theme.text}`}>
-                                  {entry.subject}
-                                </span>
-
-                                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-300">
-                                  {entry.room && (
-                                    <span className="flex items-center gap-1">
-                                      <MapPin className="w-2.5 h-2.5 text-cyan-300" />
-                                      {entry.room}
-                                    </span>
-                                  )}
-                                  {entry.teacher && (
-                                    <span className="truncate max-w-[80px]">
-                                      {entry.teacher}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
+                              <span className={`text-xs sm:text-sm font-bold font-display line-clamp-1 text-center ${theme.text}`}>
+                                {entry.subject}
+                              </span>
                               {entry.notes && (
-                                <p className="text-[9px] text-slate-300/80 italic mt-0.5 truncate">
+                                <span className="text-[9px] text-slate-300/80 italic truncate max-w-full block">
                                   {entry.notes}
-                                </p>
+                                </span>
                               )}
                             </div>
                           ) : (
@@ -704,34 +667,6 @@ export default function TimetableView({ currentUser: propsUser }) {
                   onChange={(e) => setCellSubject(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Phòng Học / Địa Điểm
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="A.302, Online Zoom..."
-                    value={cellRoom}
-                    onChange={(e) => setCellRoom(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Giáo Viên Phụ Trách
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ThS. Nguyễn Văn A"
-                    value={cellTeacher}
-                    onChange={(e) => setCellTeacher(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                  />
-                </div>
               </div>
 
               {/* Color Theme Selector */}
