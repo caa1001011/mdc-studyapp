@@ -7,7 +7,6 @@ import {
   HelpCircle,
   Timer,
   Gamepad2,
-  Sparkles,
   Music,
   Play,
   Pause,
@@ -17,12 +16,12 @@ import { USER_PROFILE } from '../data/mockData';
 
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Trang Chủ', icon: LayoutDashboard, badge: null },
-  { id: 'timetable', label: 'Thời Khóa Biểu', icon: CalendarDays, badge: 'Hôm nay' },
+  { id: 'timetable', label: 'Thời Khóa Biểu', icon: CalendarDays, badge: null },
   { id: 'study', label: 'Bài Học', icon: BookOpen, badge: null },
-  { id: 'flashcards', label: 'Thẻ Ghi Nhớ (Flashcard)', icon: Layers, badge: 'Ôn tập' },
-  { id: 'quiz', label: 'Luyện Đề & Trắc Nghiệm', icon: HelpCircle, badge: null },
-  { id: 'pomodoro', label: 'Đồng Hồ Pomodoro', icon: Timer, badge: '25p' },
-  { id: 'games', label: 'Trò Chơi Học Tập', icon: Gamepad2, badge: '+100 XP' },
+  { id: 'flashcards', label: 'Thẻ Ghi Nhớ (Flashcard)', icon: Layers, badge: null },
+  { id: 'quiz', label: 'Luyện Đề & Ôn Thi', icon: HelpCircle, badge: null },
+  { id: 'pomodoro', label: 'Đồng Hồ Pomodoro', icon: Timer, badge: null },
+  { id: 'games', label: 'Trò Chơi Học Tập', icon: Gamepad2, badge: null },
 ];
 
 export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
@@ -37,16 +36,6 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
         { id: 'users', label: 'Quản Lý Tài Khoản', icon: Users, badge: 'Admin' },
       ]
     : NAV_ITEMS;
-
-  const weekDots = [
-    { day: 'T2', active: true },
-    { day: 'T3', active: true },
-    { day: 'T4', active: true },
-    { day: 'T5', active: true },
-    { day: 'T6', active: false },
-    { day: 'T7', active: false },
-    { day: 'CN', active: false },
-  ];
 
   return (
     <aside className="w-72 flex-shrink-0 flex flex-col justify-between p-4 glass-panel border-r border-white/10 h-[calc(100vh-53px)] sticky top-[53px] overflow-y-auto scrollbar-none">
@@ -78,9 +67,9 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
                 <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-7 bg-gradient-to-b from-purple-400 to-indigo-400 rounded-r-full shadow-md shadow-purple-400" />
               )}
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className={`p-2 rounded-xl transition-all ${
+                  className={`p-2 rounded-xl transition-all flex-shrink-0 ${
                     isActive
                       ? 'bg-purple-500/30 text-purple-200 shadow-sm shadow-purple-500/30'
                       : 'text-slate-400 group-hover:text-purple-300 group-hover:bg-white/[0.06]'
@@ -88,7 +77,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
                 >
                   <Icon className="w-4 h-4" />
                 </div>
-                <span className="font-display tracking-tight text-left">{item.label}</span>
+                <span className="font-display tracking-tight text-left whitespace-nowrap truncate">{item.label}</span>
               </div>
 
               {item.badge && (
@@ -109,36 +98,8 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser }) {
         })}
       </div>
 
-      {/* 2. Bottom Widgets: Weekly Study Days & Focus Target */}
+      {/* 2. Bottom Widgets: Focus Target */}
       <div className="mt-auto space-y-3 pt-4">
-        {/* Weekly Study Tracker */}
-        <div className="p-3.5 rounded-2xl glass-card border border-white/10">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-300 mb-2">
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Chăm Chỉ Trong Tuần
-            </span>
-            <span className="text-[11px] text-purple-300 font-mono">4/7 ngày</span>
-          </div>
-
-          <div className="flex items-center justify-between gap-1">
-            {weekDots.map((dot, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-1">
-                <div
-                  className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold transition-all ${
-                    dot.active
-                      ? 'bg-gradient-to-tr from-amber-500 to-red-500 text-white shadow-sm shadow-amber-500/30'
-                      : 'bg-white/[0.04] text-slate-500 border border-white/10'
-                  }`}
-                >
-                  {dot.active ? '✓' : ''}
-                </div>
-                <span className="text-[9px] text-slate-400">{dot.day}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Daily Study Goal */}
         <div className="p-4 rounded-2xl glass-card relative overflow-hidden border border-white/10">
           <div className="flex items-center justify-between mb-1.5">

@@ -106,7 +106,7 @@ export default function TimetableView({ currentUser: propsUser }) {
 
   // State for Time Slots
   const [timeSlots, setTimeSlots] = useState(() => {
-    const saved = localStorage.getItem(`lumina_time_slots_${username}`) || localStorage.getItem('lumina_time_slots');
+    const saved = localStorage.getItem(`lumina_time_slots_${username}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -121,9 +121,9 @@ export default function TimetableView({ currentUser: propsUser }) {
     return DEFAULT_TIME_SLOTS;
   });
 
-  // State for Schedule entries in grid (xóa sạch toàn bộ dữ liệu cũ theo yêu cầu)
+  // State for Schedule entries in grid (mỗi tài khoản mới bắt đầu với thời khóa biểu rỗng)
   const [scheduleEntries, setScheduleEntries] = useState(() => {
-    const saved = localStorage.getItem(`lumina_schedule_entries_${username}`) || localStorage.getItem('lumina_schedule_entries');
+    const saved = localStorage.getItem(`lumina_schedule_entries_${username}`);
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -157,12 +157,17 @@ export default function TimetableView({ currentUser: propsUser }) {
       setIsLoadingFromFirebase(true);
       try {
         const data = await fetchUserTimetable(username);
-        if (!isCancelled && data) {
-          if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
-            setTimeSlots(data.timeSlots);
-          }
-          if (Array.isArray(data.scheduleEntries)) {
-            setScheduleEntries(data.scheduleEntries);
+        if (!isCancelled) {
+          if (data) {
+            if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
+              setTimeSlots(data.timeSlots);
+            } else {
+              setTimeSlots(DEFAULT_TIME_SLOTS);
+            }
+            setScheduleEntries(Array.isArray(data.scheduleEntries) ? data.scheduleEntries : []);
+          } else {
+            setTimeSlots(DEFAULT_TIME_SLOTS);
+            setScheduleEntries([]);
           }
         }
       } catch (err) {
@@ -185,12 +190,10 @@ export default function TimetableView({ currentUser: propsUser }) {
   // Lưu bản sao vào localStorage theo user khi có thay đổi
   useEffect(() => {
     localStorage.setItem(`lumina_time_slots_${username}`, JSON.stringify(timeSlots));
-    localStorage.setItem('lumina_time_slots', JSON.stringify(timeSlots));
   }, [timeSlots, username]);
 
   useEffect(() => {
     localStorage.setItem(`lumina_schedule_entries_${username}`, JSON.stringify(scheduleEntries));
-    localStorage.setItem('lumina_schedule_entries', JSON.stringify(scheduleEntries));
   }, [scheduleEntries, username]);
 
   // Open modal to add a brand new time slot

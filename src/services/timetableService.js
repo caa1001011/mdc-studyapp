@@ -126,9 +126,6 @@ export async function saveUserTimetable(username, { timeSlots, scheduleEntries }
   try {
     localStorage.setItem(`lumina_time_slots_${cleanUsername}`, JSON.stringify(timeSlots || []));
     localStorage.setItem(`lumina_schedule_entries_${cleanUsername}`, JSON.stringify(scheduleEntries || []));
-    // Cập nhật cả khóa chung để tương thích phiên hiện tại
-    localStorage.setItem('lumina_time_slots', JSON.stringify(timeSlots || []));
-    localStorage.setItem('lumina_schedule_entries', JSON.stringify(scheduleEntries || []));
   } catch (storageError) {
     console.warn('Lỗi ghi LocalStorage:', storageError);
   }
