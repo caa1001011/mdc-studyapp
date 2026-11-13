@@ -84,7 +84,7 @@ export default function App() {
       case 'study':
         return <StudySpaceView currentUser={currentUser} />;
       case 'flashcards':
-        return <FlashcardView />;
+        return <FlashcardView currentUser={currentUser} />;
       case 'quiz':
         return <QuizReviewView />;
       case 'pomodoro':
