@@ -61,7 +61,11 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
   const displayAvatar = currentUser?.avatar || USER_PROFILE.avatar;
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/10 dark:border-white/10 border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2 transition-all">
+    <header className={`sticky top-0 z-40 w-full border-b px-4 sm:px-6 lg:px-8 py-2 transition-all ${
+      isDark
+        ? 'bg-[#0b0d17] border-white/10'
+        : 'bg-white border-slate-200'
+    }`}>
       <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-4">
         {/* 1. Góc trên bên trái: CHỈ CÓ LOGO VÀ TÊN WEB APP */}
         <div className="flex items-center gap-2.5 select-none flex-shrink-0">

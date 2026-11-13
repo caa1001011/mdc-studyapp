@@ -18,7 +18,7 @@ import { USER_PROFILE } from '../data/mockData';
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Trang Chủ', icon: LayoutDashboard, badge: null },
   { id: 'timetable', label: 'Thời Khóa Biểu', icon: CalendarDays, badge: 'Hôm nay' },
-  { id: 'study', label: 'Môn Học & Bài Tập', icon: BookOpen, badge: '5 bài' },
+  { id: 'study', label: 'Bài Học', icon: BookOpen, badge: null },
   { id: 'flashcards', label: 'Thẻ Ghi Nhớ (Flashcard)', icon: Layers, badge: 'Ôn tập' },
   { id: 'quiz', label: 'Luyện Đề & Trắc Nghiệm', icon: HelpCircle, badge: null },
   { id: 'pomodoro', label: 'Đồng Hồ Pomodoro', icon: Timer, badge: '25p' },
