@@ -1,6 +1,7 @@
 // Cấu hình kết nối cơ sở dữ liệu Firebase (Sử dụng biến môi trường từ file .env kèm fallback cho môi trường deploy)
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyB0-FwkM0qoA8svofJ7Ubr2lvPPHP1pCFI',
@@ -19,7 +20,8 @@ export const app = hasValidConfig
   ? (!getApps().length ? initializeApp(firebaseConfig) : getApp())
   : null;
 
-// Khởi tạo đối tượng Cơ sở dữ liệu Cloud Firestore
+// Khởi tạo đối tượng Cơ sở dữ liệu Cloud Firestore & Storage
 export const db = app ? getFirestore(app) : null;
+export const storage = app ? getStorage(app) : null;
 
 export default db;

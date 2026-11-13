@@ -82,7 +82,7 @@ export default function App() {
       case 'timetable':
         return <TimetableView currentUser={currentUser} />;
       case 'study':
-        return <StudySpaceView />;
+        return <StudySpaceView currentUser={currentUser} />;
       case 'flashcards':
         return <FlashcardView />;
       case 'quiz':
