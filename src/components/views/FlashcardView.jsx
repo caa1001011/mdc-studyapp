@@ -306,52 +306,36 @@ export default function FlashcardView({ currentUser: propsUser }) {
   };
 
   return (
-    <div className="space-y-6 md:space-y-8 pb-10">
-      {/* 1. Header & Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="space-y-5 pb-10">
+      {/* 1. Header & Actions (Gọn gàng trên 1 hàng) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold mb-2">
-            <Layers className="w-3.5 h-3.5 text-purple-300" />
-            <span>Từ Vựng Tiếng Anh (Flashcard)</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
+          <h1 className="text-xl sm:text-2xl font-extrabold font-display tracking-tight text-white">
             Thẻ Ghi Nhớ Từ Vựng Tiếng Anh
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Học từ vựng Tiếng Anh theo từng Unit Sách Giáo Khoa hoặc tự tạo bộ thẻ cá nhân
+          <p className="text-xs text-slate-400 mt-0.5">
+            Học theo từng Unit Sách Giáo Khoa hoặc tự tạo bộ thẻ cá nhân
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-shrink-0">
           {isAdmin && (
             <button
               onClick={() => openCreateModal('textbook')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold shadow-lg shadow-amber-500/25 hover:scale-[1.02] transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
             >
-              <BookOpen className="w-4 h-4" />
+              <BookOpen className="w-3.5 h-3.5" />
               <span>Thêm Bộ Sách Giáo Khoa</span>
             </button>
           )}
 
           <button
             onClick={() => openCreateModal('personal')}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-purple-600/30 hover:scale-[1.02] transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/25 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>Tạo Bộ Thẻ Mới</span>
           </button>
-
-          {/* Keyboard Shortcuts Hint */}
-          <div className="hidden xl:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl glass-card border border-white/10 text-xs text-slate-300">
-            <Keyboard className="w-4 h-4 text-purple-400" />
-            <span className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/10 font-mono text-[11px] text-white">
-              Space
-            </span>
-            <span className="text-slate-400">Lật</span>
-            <span className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/10 font-mono text-[11px] text-white">
-              ← / →
-            </span>
-          </div>
         </div>
       </div>
 
@@ -582,7 +566,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons (Chỉ nhấp trực tiếp vào thẻ để lật) */}
               <div className="flex items-center justify-center gap-4 pt-2">
                 <button
                   onClick={() => handleNext(false)}
@@ -593,20 +577,31 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </button>
 
                 <button
-                  onClick={handleFlip}
-                  className="w-12 h-12 rounded-2xl glass-button flex items-center justify-center text-purple-300 hover:text-white cursor-pointer"
-                  title="Lật thẻ"
-                >
-                  <RotateCw className="w-4 h-4" />
-                </button>
-
-                <button
                   onClick={() => handleNext(true)}
                   className="flex-1 max-w-[220px] py-3.5 px-6 rounded-2xl glass-card border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-500/10 text-emerald-200 hover:text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
                 >
                   <Check className="w-4 h-4 text-emerald-400" />
                   <span>Đã Thuộc [→]</span>
                 </button>
+              </div>
+
+              {/* Chỉ dẫn thao tác rõ ràng */}
+              <div className="hidden lg:flex items-center justify-center gap-3 text-xs text-slate-400">
+                <Keyboard className="w-3.5 h-3.5 text-purple-400" />
+                <span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 font-mono text-[11px] text-white">Space</kbd>{' '}
+                  Lật thẻ
+                </span>
+                <span>•</span>
+                <span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 font-mono text-[11px] text-white">←</kbd>{' '}
+                  Cần ôn lại
+                </span>
+                <span>•</span>
+                <span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 font-mono text-[11px] text-white">→</kbd>{' '}
+                  Đã thuộc
+                </span>
               </div>
             </>
           ) : (
