@@ -319,18 +319,8 @@ export default function FlashcardView({ currentUser: propsUser }) {
         </div>
 
         <div className="flex items-center gap-2.5 flex-shrink-0">
-          {isAdmin && (
-            <button
-              onClick={() => openCreateModal('textbook')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Thêm Bộ Sách Giáo Khoa</span>
-            </button>
-          )}
-
           <button
-            onClick={() => openCreateModal('personal')}
+            onClick={() => openCreateModal(isAdmin ? 'textbook' : 'personal')}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/25 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -494,30 +484,30 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 />
               </div>
 
-              {/* 3D Flip Card */}
+              {/* 3D Flip Card - Co giãn linh hoạt theo nội dung, không dùng glass-card để tránh :hover ghi đè rotate-y-180 */}
               <div
-                className="perspective-1000 w-full h-[400px] cursor-pointer select-none"
+                className="perspective-1000 w-full cursor-pointer select-none"
                 onClick={handleFlip}
               >
                 <div
-                  className={`relative w-full h-full duration-500 transform-style-3d transition-transform ${
+                  className={`grid w-full duration-500 transform-style-3d transition-transform ${
                     isFlipped ? 'rotate-y-180' : ''
                   }`}
                 >
                   {/* FRONT FACE */}
-                  <div className="absolute inset-0 w-full h-full backface-hidden rounded-3xl glass-card p-8 flex flex-col justify-between border border-purple-500/40 shadow-2xl bg-gradient-to-b from-[#141628] via-[#0d0f1b] to-[#07080f]">
-                    <div className="flex items-center justify-between">
-                      <span className="px-3.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-200 border border-purple-400/30">
+                  <div className="col-start-1 row-start-1 w-full backface-hidden rounded-3xl p-6 sm:p-7 flex flex-col justify-between gap-5 border border-purple-500/40 shadow-2xl bg-gradient-to-b from-[#141628] via-[#0d0f1b] to-[#07080f]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-200 border border-purple-400/30">
                         {currentDeck.unit || 'Tiếng Anh'}
                       </span>
-                      <div className="flex items-center gap-2 text-slate-400 text-xs">
-                        <Sparkles className="w-4 h-4 text-purple-400" />
+                      <div className="flex items-center gap-1.5 text-slate-400 text-xs">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                         <span>Từ vựng Tiếng Anh</span>
                       </div>
                     </div>
 
-                    <div className="text-center my-auto px-6">
-                      <div className="text-3xl sm:text-4xl font-extrabold font-display tracking-tight text-white shimmer-text">
+                    <div className="text-center py-4 px-4">
+                      <div className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white shimmer-text break-words">
                         {currentCard.front}
                       </div>
                       {currentCard.phonetic && (
@@ -526,41 +516,41 @@ export default function FlashcardView({ currentUser: propsUser }) {
                         </div>
                       )}
                       {currentCard.hint && (
-                        <div className="mt-5 p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-xs text-slate-300 max-w-lg mx-auto">
+                        <div className="mt-4 p-3 rounded-2xl bg-white/[0.04] border border-white/10 text-xs text-slate-300 max-w-lg mx-auto">
                           💡 <strong>Gợi ý:</strong> {currentCard.hint}
                         </div>
                       )}
                     </div>
 
                     <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-3 border-t border-white/10">
-                      <RotateCw className="w-4 h-4 text-purple-400" />
-                      <span>Nhấn chuột hoặc phím [Space] để lật nghĩa</span>
+                      <RotateCw className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Nhấp vào thẻ để lật xem nghĩa</span>
                     </div>
                   </div>
 
                   {/* BACK FACE */}
-                  <div className="absolute inset-0 w-full h-full backface-hidden rotate-y-180 rounded-3xl glass-card p-8 flex flex-col justify-between border border-emerald-500/40 shadow-2xl bg-gradient-to-b from-[#0f211f] via-[#0a1717] to-[#07080f]">
-                    <div className="flex items-center justify-between">
-                      <span className="px-3.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
+                  <div className="col-start-1 row-start-1 w-full backface-hidden rotate-y-180 rounded-3xl p-6 sm:p-7 flex flex-col justify-between gap-5 border border-emerald-500/40 shadow-2xl bg-gradient-to-b from-[#0f211f] via-[#0a1717] to-[#07080f]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
                         Nghĩa & Ví Dụ
                       </span>
                       <span className="text-xs text-emerald-400 font-semibold">✓ Mặt sau</span>
                     </div>
 
-                    <div className="my-auto space-y-4 px-4 text-center">
-                      <div className="text-xl sm:text-2xl font-bold font-display text-white whitespace-pre-line leading-relaxed">
+                    <div className="py-4 space-y-3 px-4 text-center">
+                      <div className="text-xl sm:text-2xl font-bold font-display text-white whitespace-pre-line leading-relaxed break-words">
                         {currentCard.back}
                       </div>
                       {currentCard.example && (
-                        <div className="p-4 rounded-2xl bg-white/[0.04] border border-white/10 text-xs sm:text-sm text-slate-200 leading-relaxed text-left">
+                        <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-xs sm:text-sm text-slate-200 leading-relaxed text-left">
                           <strong className="text-emerald-300">Ví dụ:</strong> "{currentCard.example}"
                         </div>
                       )}
                     </div>
 
                     <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-3 border-t border-white/10">
-                      <RotateCw className="w-4 h-4 text-emerald-400" />
-                      <span>Nhấn để lật lại mặt trước</span>
+                      <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Nhấp vào thẻ để lật lại mặt trước</span>
                     </div>
                   </div>
                 </div>
@@ -708,6 +698,36 @@ export default function FlashcardView({ currentUser: propsUser }) {
               {modalError && (
                 <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-semibold">
                   {modalError}
+                </div>
+              )}
+
+              {/* Dành cho Admin: chọn lưu vào Sách Giáo Khoa (Unit) hoặc Bộ Thẻ Cá Nhân */}
+              {isAdmin && (
+                <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.04] border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setCreateTarget('textbook')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      createTarget === 'textbook'
+                        ? 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Sách Giáo Khoa (Theo Unit)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateTarget('personal')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      createTarget === 'personal'
+                        ? 'bg-purple-600/35 text-white border border-purple-400/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Bộ Thẻ Cá Nhân</span>
+                  </button>
                 </div>
               )}
 
