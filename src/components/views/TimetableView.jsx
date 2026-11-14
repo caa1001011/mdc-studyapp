@@ -33,18 +33,8 @@ const COLOR_THEMES = [
   { id: 'blue', name: 'Xanh Dương', bg: 'bg-blue-500/20', border: 'border-blue-500/40', text: 'text-blue-200', glow: 'shadow-blue-500/20' },
 ];
 
-// Default Time Slots (Can be edited, deleted, or added by the user) - Không phân loại buổi
-const DEFAULT_TIME_SLOTS = [
-  { id: 'slot-1', name: 'Tiết 1', startTime: '07:15', endTime: '08:00' },
-  { id: 'slot-2', name: 'Tiết 2', startTime: '08:05', endTime: '08:50' },
-  { id: 'slot-3', name: 'Tiết 3', startTime: '09:05', endTime: '09:50' },
-  { id: 'slot-4', name: 'Tiết 4', startTime: '09:55', endTime: '10:40' },
-  { id: 'slot-5', name: 'Tiết 5', startTime: '10:45', endTime: '11:30' },
-  { id: 'slot-6', name: 'Tiết 6', startTime: '13:30', endTime: '14:15' },
-  { id: 'slot-7', name: 'Tiết 7', startTime: '14:20', endTime: '15:05' },
-  { id: 'slot-8', name: 'Tiết 8', startTime: '15:20', endTime: '16:05' },
-  { id: 'slot-9', name: 'Ca Tối', startTime: '19:30', endTime: '21:30' },
-];
+// Default Time Slots (Mặc định trống cho tài khoản mới để người dùng tự thiết kế)
+const DEFAULT_TIME_SLOTS = [];
 
 // Hàm hỗ trợ nhập thời gian 24 giờ (HH:mm) không có AM/PM
 const format24hTime = (val) => {
@@ -153,14 +143,10 @@ export default function TimetableView({ currentUser: propsUser }) {
         const data = await fetchUserTimetable(username);
         if (!isCancelled) {
           if (data) {
-            if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
-              setTimeSlots(data.timeSlots);
-            } else {
-              setTimeSlots(DEFAULT_TIME_SLOTS);
-            }
+            setTimeSlots(Array.isArray(data.timeSlots) ? data.timeSlots : []);
             setScheduleEntries(Array.isArray(data.scheduleEntries) ? data.scheduleEntries : []);
           } else {
-            setTimeSlots(DEFAULT_TIME_SLOTS);
+            setTimeSlots([]);
             setScheduleEntries([]);
           }
         }
