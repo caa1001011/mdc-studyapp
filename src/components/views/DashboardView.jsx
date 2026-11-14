@@ -395,103 +395,112 @@ export default function DashboardView({ currentUser }) {
         </div>
       </div>
 
-      {/* 2. Khu vực Sự kiện gọn gàng */}
-      <div className="py-4 space-y-3 max-w-2xl">
-        {/* Chỉ hiển thị sự kiện ngày đang chọn khi ngày đó có sự kiện */}
-        {selectedDayEvents.length > 0 && (
-          <div className="p-3.5 rounded-2xl glass-card border border-purple-400/25 space-y-2">
-            <div className="flex items-center justify-between text-xs font-bold text-purple-300">
-              <span>Sự kiện ngày {formatDateDisplay(selectedDateKey)}</span>
-              <span className="text-[11px] text-slate-400">{selectedDayEvents.length} sự kiện</span>
-            </div>
+      {/* 2. Khu vực Sự kiện gọn gàng, tinh tế ở bên phải */}
+      <div className="py-4 flex justify-end">
+        <div className="w-full sm:w-80 p-3 rounded-2xl glass-card border border-white/10 space-y-2.5">
+          {/* Chỉ hiển thị sự kiện ngày đang chọn khi ngày đó có sự kiện */}
+          {selectedDayEvents.length > 0 && (
             <div className="space-y-1.5">
-              {selectedDayEvents.map((ev) => (
-                <div
-                  key={ev.id}
-                  className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs sm:text-sm font-semibold text-white truncate">{ev.title}</span>
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">
+                  Ngày {formatDateDisplay(selectedDateKey)}
+                </span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300">
+                  {selectedDayEvents.length}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                {selectedDayEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="group px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 flex items-center justify-between gap-2 transition-colors"
+                  >
+                    <div className="min-w-0 flex items-center gap-2 flex-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                      <span className="text-xs font-semibold text-white truncate">{ev.title}</span>
                       {ev.time && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-cyan-300 shrink-0">
-                          <Clock className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-cyan-300 shrink-0">
+                          <Clock className="w-2.5 h-2.5" />
                           {ev.time}
                         </span>
                       )}
                     </div>
-                    {ev.note && <p className="text-[11px] text-slate-400 truncate mt-0.5">{ev.note}</p>}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEvent(ev.id)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
-                    title="Xóa sự kiện"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sự kiện sắp tới - giao diện gọn gàng */}
-        <div className="p-3.5 rounded-2xl glass-card border border-white/10 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-              <CalendarDays className="w-3.5 h-3.5 text-cyan-300" />
-              <span>Sự kiện sắp tới</span>
-            </div>
-            {upcomingEvents.length > 0 && (
-              <span className="text-[11px] text-slate-400">{upcomingEvents.length} sự kiện</span>
-            )}
-          </div>
-
-          {upcomingEvents.length === 0 ? (
-            <p className="text-xs text-slate-400 py-1">
-              Chưa có sự kiện nào sắp tới. Chọn ngày trên lịch và nhấn &quot;+ Sự kiện&quot; để thêm.
-            </p>
-          ) : (
-            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-0.5">
-              {upcomingEvents.map((ev) => (
-                <div
-                  key={`up-${ev.id}`}
-                  onClick={() => {
-                    const d = parseDateKey(ev.date);
-                    setSelectedDate(d);
-                    setCurrentMonth(d.getMonth());
-                    setCurrentYear(d.getFullYear());
-                  }}
-                  className="px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 flex items-center justify-between gap-2.5 cursor-pointer transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs sm:text-sm font-semibold text-white truncate">{ev.title}</div>
-                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                      <span>{formatDateDisplay(ev.date)}</span>
-                      {ev.time && <span>• {ev.time}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-200 border border-purple-400/30">
-                      {ev.daysUntil === 0 ? 'Hôm nay' : `Còn ${ev.daysUntil} ngày`}
-                    </span>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteEvent(ev.id);
-                      }}
-                      className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      onClick={() => handleDeleteEvent(ev.id)}
+                      className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
                       title="Xóa sự kiện"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Sự kiện sắp tới */}
+          <div className={selectedDayEvents.length > 0 ? 'pt-2 border-t border-white/10 space-y-1.5' : 'space-y-1.5'}>
+            <div className="flex items-center justify-between px-0.5">
+              <div className="flex items-center gap-1.5">
+                <CalendarDays className="w-3.5 h-3.5 text-cyan-300" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  Sự kiện sắp tới
+                </span>
+              </div>
+              {upcomingEvents.length > 0 && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 text-slate-300">
+                  {upcomingEvents.length}
+                </span>
+              )}
+            </div>
+
+            {upcomingEvents.length === 0 ? (
+              <p className="text-[11px] text-slate-400 px-0.5">
+                Chưa có sự kiện nào sắp tới.
+              </p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                {upcomingEvents.map((ev) => (
+                  <div
+                    key={`up-${ev.id}`}
+                    onClick={() => {
+                      const d = parseDateKey(ev.date);
+                      setSelectedDate(d);
+                      setCurrentMonth(d.getMonth());
+                      setCurrentYear(d.getFullYear());
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-white truncate">{ev.title}</div>
+                      <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <span>{formatDateDisplay(ev.date)}</span>
+                        {ev.time && <span>• {ev.time}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-200 border border-purple-400/25">
+                        {ev.daysUntil === 0 ? 'Hôm nay' : `${ev.daysUntil} ngày`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteEvent(ev.id);
+                        }}
+                        className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        title="Xóa sự kiện"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
