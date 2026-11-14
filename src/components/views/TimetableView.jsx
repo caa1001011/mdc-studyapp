@@ -5,12 +5,9 @@ import {
   Trash2,
   Edit2,
   X,
-  Sparkles,
-  Settings,
   Check,
   Save,
-  Loader2,
-  ChevronDown
+  Loader2
 } from 'lucide-react';
 import { fetchUserTimetable, saveUserTimetable } from '../../services/timetableService';
 import { getSessionUser } from '../../services/authService';
@@ -48,9 +45,6 @@ const DEFAULT_TIME_SLOTS = [
   { id: 'slot-8', name: 'Tiết 8', startTime: '15:20', endTime: '16:05' },
   { id: 'slot-9', name: 'Ca Tối', startTime: '19:30', endTime: '21:30' },
 ];
-
-// Default Initial Classes placed into the grid (Đã xóa toàn bộ dữ liệu mẫu)
-const DEFAULT_SCHEDULE_ENTRIES = [];
 
 // Hàm hỗ trợ nhập thời gian 24 giờ (HH:mm) không có AM/PM
 const format24hTime = (val) => {
@@ -114,7 +108,7 @@ export default function TimetableView({ currentUser: propsUser }) {
           ...s,
           name: s.name.replace(' (Chiều)', '').replace(': Tự Học & Luyện Đề', '')
         }));
-      } catch (e) {
+      } catch {
         return DEFAULT_TIME_SLOTS;
       }
     }
@@ -127,7 +121,7 @@ export default function TimetableView({ currentUser: propsUser }) {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {
+      } catch {
         return [];
       }
     }
@@ -426,23 +420,23 @@ export default function TimetableView({ currentUser: propsUser }) {
       {/* 2. THE GRAND TIMETABLE MATRIX TABLE */}
       <div className="rounded-2xl glass-card border border-white/15 overflow-hidden shadow-2xl relative">
         <div className="overflow-x-auto scrollbar-none">
-          <table className="w-full border-collapse text-left min-w-[850px]">
+          <table className="w-full border-collapse text-left min-w-[720px] table-fixed">
             {/* Table Header: Days of Week */}
             <thead>
               <tr className="border-b border-white/15 bg-white/[0.04]">
-                {/* Column 0: Time Frame header - Thu gọn & tự động co giãn theo nội dung */}
-                <th className="py-3 px-3.5 w-px whitespace-nowrap font-display font-bold text-xs sm:text-sm uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/90 backdrop-blur-md border-r border-white/10">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-purple-400 shrink-0" />
+                {/* Column 0: Time Frame header - Gọn chiều ngang & chuẩn UI */}
+                <th className="py-2.5 px-2 w-[105px] whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/95 backdrop-blur-md border-r border-white/10 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span>Khung Giờ</span>
                   </div>
                 </th>
 
-                {/* Days 1 to 7 - Căn chỉnh các thứ to rõ, dễ nhìn, xóa bộ đếm số môn học */}
+                {/* Days 1 to 7 - Căn chỉnh đồng đều, gọn gàng, chuẩn UI */}
                 {DAYS_OF_WEEK.map((day) => (
                   <th
                     key={day.index}
-                    className="py-3 px-3 font-display font-bold text-sm sm:text-base text-white border-r border-white/10 last:border-r-0 text-center min-w-[105px]"
+                    className="py-2.5 px-2 font-display font-bold text-xs sm:text-sm text-white border-r border-white/10 last:border-r-0 text-center"
                   >
                     <span className="tracking-wide">{day.label}</span>
                   </th>
@@ -458,14 +452,14 @@ export default function TimetableView({ currentUser: propsUser }) {
                     key={slot.id}
                     className="group/row hover:bg-white/[0.02] transition-colors"
                   >
-                    {/* Sticky Left Column: Time Slot Info & Edit Controls - Tự động co giãn theo nội dung */}
-                    <td className="py-2 px-3 w-px whitespace-nowrap sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
-                      <div className="flex items-center justify-between gap-2.5">
-                        <div>
-                          <span className="font-display font-bold text-xs text-white block">
+                    {/* Sticky Left Column: Time Slot Info & Edit Controls - Gọn gàng */}
+                    <td className="py-1.5 px-2 w-[105px] whitespace-nowrap sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="min-w-0">
+                          <span className="font-display font-bold text-xs text-white block truncate leading-tight">
                             {slot.name}
                           </span>
-                          <span className="text-[10px] font-mono text-purple-300 block mt-0.5">
+                          <span className="text-[10px] font-mono text-purple-300 block leading-tight mt-0.5">
                             {slot.startTime} - {slot.endTime}
                           </span>
                         </div>
@@ -474,14 +468,14 @@ export default function TimetableView({ currentUser: propsUser }) {
                         <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
                           <button
                             onClick={() => handleOpenEditSlot(slot)}
-                            className="p-1 rounded-md text-slate-400 hover:text-purple-300 hover:bg-white/[0.08]"
+                            className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-white/[0.08] cursor-pointer"
                             title="Chỉnh sửa khung giờ này"
                           >
                             <Edit2 className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => handleDeleteSlot(slot.id)}
-                            className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-white/[0.08]"
+                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-white/[0.08] cursor-pointer"
                             title="Xóa khung giờ này"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -501,30 +495,27 @@ export default function TimetableView({ currentUser: propsUser }) {
                         <td
                           key={day.index}
                           onClick={() => handleCellClick(slot.id, day.index)}
-                          className="p-1.5 border-r border-white/10 last:border-r-0 align-top cursor-pointer transition-all hover:bg-white/[0.03] group/cell relative"
+                          className="p-1 border-r border-white/10 last:border-r-0 align-middle cursor-pointer transition-all hover:bg-white/[0.03] group/cell relative"
                         >
                           {entry ? (
-                            /* Filled Class Cell: Căn chỉnh tên môn học cân đối ở giữa, không có biểu tượng vị trí */
+                            /* Filled Class Cell: Gọn gàng, chữ vừa vặn, không chiếm quá nhiều diện tích */
                             <div
                               title={entry.notes ? `${entry.subject} (${entry.notes})` : entry.subject}
-                              className={`w-full h-[46px] rounded-xl px-2.5 py-1 border transition-all duration-200 flex flex-col items-center justify-center text-center ${theme.bg} ${theme.border} ${theme.glow} shadow-sm group-hover/cell:scale-[1.02]`}
+                              className={`w-full min-h-[42px] rounded-xl px-2 py-1 border transition-all duration-200 flex flex-col items-center justify-center text-center overflow-hidden ${theme.bg} ${theme.border} ${theme.glow} shadow-sm group-hover/cell:scale-[1.01]`}
                             >
-                              <span className={`text-xs sm:text-sm font-bold font-display line-clamp-1 text-center ${theme.text}`}>
+                              <span className={`text-xs font-bold font-display line-clamp-1 leading-snug text-center ${theme.text}`}>
                                 {entry.subject}
                               </span>
                               {entry.notes && (
-                                <span className="text-[10px] font-semibold text-slate-800 dark:text-slate-100 px-1.5 py-0.5 rounded-md bg-black/[0.06] dark:bg-white/10 truncate max-w-full block leading-none mt-0.5">
+                                <span className="text-[9.5px] font-medium text-slate-200/90 truncate max-w-full block leading-none mt-0.5 px-1.5 py-0.5 rounded bg-black/20 dark:bg-white/10">
                                   {entry.notes}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            /* Empty Cell (Compact with subtle '+' on hover) */
-                            <div className="w-full h-[46px] rounded-xl border border-dashed border-white/10 group-hover/cell:border-purple-400/40 group-hover/cell:bg-purple-500/[0.05] transition-all flex items-center justify-center gap-1 text-slate-500 group-hover/cell:text-purple-300">
+                            /* Empty Cell: Gọn gàng với biểu tượng nhẹ khi hover */
+                            <div className="w-full h-[42px] rounded-xl border border-dashed border-white/10 group-hover/cell:border-purple-400/40 group-hover/cell:bg-purple-500/[0.05] transition-all flex items-center justify-center text-slate-500 group-hover/cell:text-purple-300">
                               <Plus className="w-3.5 h-3.5 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
-                              <span className="text-[10px] opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                Thêm môn
-                              </span>
                             </div>
                           )}
                         </td>
