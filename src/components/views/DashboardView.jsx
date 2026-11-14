@@ -9,13 +9,43 @@ import {
   Clock,
   Trash2,
   X,
-  CalendarDays
+  CalendarDays,
+  StickyNote,
+  Pencil
 } from 'lucide-react';
 import {
   fetchUserCalendarEvents,
   loadLocalCalendarEvents,
   saveUserCalendarEvents
 } from '../../services/calendarEventService';
+import {
+  fetchUserPersonalNotes,
+  loadLocalPersonalNotes,
+  saveUserPersonalNotes
+} from '../../services/personalNoteService';
+
+const NOTE_COLORS = {
+  purple: {
+    label: 'Tím',
+    card: 'border-purple-400/25 bg-purple-500/[0.06]',
+    dot: 'bg-purple-400'
+  },
+  cyan: {
+    label: 'Xanh ngọc',
+    card: 'border-cyan-400/25 bg-cyan-500/[0.06]',
+    dot: 'bg-cyan-400'
+  },
+  amber: {
+    label: 'Vàng',
+    card: 'border-amber-400/25 bg-amber-500/[0.06]',
+    dot: 'bg-amber-400'
+  },
+  emerald: {
+    label: 'Xanh lá',
+    card: 'border-emerald-400/25 bg-emerald-500/[0.06]',
+    dot: 'bg-emerald-400'
+  }
+};
 
 const toDateKey = (date) => {
   const y = date.getFullYear();
@@ -55,6 +85,14 @@ export default function DashboardView({ currentUser }) {
   // Danh sách sự kiện theo tài khoản (cache LocalStorage + đồng bộ Firebase)
   const [events, setEvents] = useState(() => loadLocalCalendarEvents(username));
 
+  // Danh sách ghi chú cá nhân theo tài khoản (cache LocalStorage + đồng bộ Firebase)
+  const [notes, setNotes] = useState(() => loadLocalPersonalNotes(username));
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [noteColor, setNoteColor] = useState('purple');
+
   // Modal thêm sự kiện
   const [showAddModal, setShowAddModal] = useState(false);
   const [eventTitle, setEventTitle] = useState('');
@@ -64,12 +102,17 @@ export default function DashboardView({ currentUser }) {
 
   const pickerRef = useRef(null);
 
-  // Tải sự kiện từ Firebase theo tài khoản người dùng
+  // Tải sự kiện và ghi chú cá nhân từ Firebase theo tài khoản người dùng
   useEffect(() => {
     let active = true;
     fetchUserCalendarEvents(username).then((loaded) => {
       if (active && Array.isArray(loaded)) {
         setEvents(loaded);
+      }
+    });
+    fetchUserPersonalNotes(username).then((loadedNotes) => {
+      if (active && Array.isArray(loadedNotes)) {
+        setNotes(loadedNotes);
       }
     });
     return () => {
@@ -237,6 +280,76 @@ export default function DashboardView({ currentUser }) {
     await saveUserCalendarEvents(username, nextEvents);
   };
 
+  const openAddNoteModal = () => {
+    setEditingNoteId(null);
+    setNoteTitle('');
+    setNoteContent('');
+    setNoteColor('purple');
+    setShowNoteModal(true);
+  };
+
+  const openEditNoteModal = (note) => {
+    setEditingNoteId(note.id);
+    setNoteTitle(note.title || '');
+    setNoteContent(note.content || '');
+    setNoteColor(note.color || 'purple');
+    setShowNoteModal(true);
+  };
+
+  const handleSaveNote = async (e) => {
+    e.preventDefault();
+    const trimmedContent = noteContent.trim();
+    if (!trimmedContent) return;
+
+    const timestamp = new Date().toISOString();
+    let nextNotes;
+
+    if (editingNoteId) {
+      nextNotes = notes.map((n) =>
+        n.id === editingNoteId
+          ? {
+              ...n,
+              title: noteTitle.trim(),
+              content: trimmedContent,
+              color: noteColor,
+              updatedAt: timestamp
+            }
+          : n
+      );
+    } else {
+      const newNote = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        title: noteTitle.trim(),
+        content: trimmedContent,
+        color: noteColor,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      nextNotes = [newNote, ...notes];
+    }
+
+    setNotes(nextNotes);
+    setShowNoteModal(false);
+    await saveUserPersonalNotes(username, nextNotes);
+  };
+
+  const handleDeleteNote = async (id) => {
+    const nextNotes = notes.filter((n) => n.id !== id);
+    setNotes(nextNotes);
+    await saveUserPersonalNotes(username, nextNotes);
+  };
+
+  const formatNoteDate = (isoString) => {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    return d.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   // Định dạng ngày hiển thị trên nút bấm (đồng bộ thời gian thực)
   const formattedLiveDate = now.toLocaleDateString('vi-VN', {
     weekday: 'short',
@@ -395,9 +508,98 @@ export default function DashboardView({ currentUser }) {
         </div>
       </div>
 
-      {/* 2. Khu vực Sự kiện gọn gàng, tinh tế ở bên phải */}
-      <div className="py-4 flex justify-end">
-        <div className="w-full sm:w-80 p-3 rounded-2xl glass-card border border-white/10 space-y-2.5">
+      {/* 2. Bố cục chính: Ghi chú cá nhân (trái) & Sự kiện gọn gàng (phải) */}
+      <div className="py-4 flex flex-col lg:flex-row items-start gap-5">
+        {/* Cột trái: Ghi chú cá nhân */}
+        <div className="flex-1 min-w-0 w-full p-4 rounded-2xl glass-card border border-white/10 space-y-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-400/25 flex items-center justify-center text-purple-300">
+                <StickyNote className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-white font-display">Ghi chú cá nhân</h2>
+                  {notes.length > 0 && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 text-slate-300">
+                      {notes.length}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">Lưu riêng theo tài khoản của bạn</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={openAddNoteModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-sm shadow-purple-500/20 transition-all cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Thêm ghi chú</span>
+            </button>
+          </div>
+
+          {notes.length === 0 ? (
+            <div className="py-8 px-4 text-center rounded-xl border border-dashed border-white/10 bg-white/[0.02]">
+              <p className="text-xs text-slate-400">
+                Chưa có ghi chú cá nhân nào. Nhấn <strong className="text-purple-300">&quot;+ Thêm ghi chú&quot;</strong> để lưu nhanh ý tưởng, mục tiêu hoặc việc cần làm.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {notes.map((note) => {
+                const palette = NOTE_COLORS[note.color] || NOTE_COLORS.purple;
+                return (
+                  <div
+                    key={note.id}
+                    className={`group p-3.5 rounded-xl border ${palette.card} flex flex-col justify-between gap-2.5 transition-all hover:bg-white/[0.06]`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-2 h-2 rounded-full ${palette.dot} shrink-0`} />
+                          <h3 className="text-xs sm:text-sm font-bold text-white truncate">
+                            {note.title || 'Ghi chú'}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEditNoteModal(note)}
+                            className="p-1 rounded-md text-slate-400 hover:text-purple-300 hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Chỉnh sửa ghi chú"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Xóa ghi chú"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 whitespace-pre-wrap break-words leading-relaxed max-h-32 overflow-y-auto pr-0.5">
+                        {note.content}
+                      </p>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 pt-1 border-t border-white/5">
+                      Cập nhật: {formatNoteDate(note.updatedAt || note.createdAt)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Cột phải: Khu vực Sự kiện gọn gàng */}
+        <div className="w-full lg:w-80 shrink-0 p-3 rounded-2xl glass-card border border-white/10 space-y-2.5">
           {/* Chỉ hiển thị sự kiện ngày đang chọn khi ngày đó có sự kiện */}
           {selectedDayEvents.length > 0 && (
             <div className="space-y-1.5">
@@ -587,6 +789,94 @@ export default function DashboardView({ currentUser }) {
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-500/20 transition-all cursor-pointer"
                 >
                   Lưu sự kiện
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal thêm / sửa ghi chú cá nhân */}
+      {showNoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md p-5 rounded-3xl glass-card border border-white/20 bg-[#0e101c] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white font-display">
+                {editingNoteId ? 'Chỉnh sửa ghi chú' : 'Thêm ghi chú cá nhân'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowNoteModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNote} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Tiêu đề (tùy chọn)
+                </label>
+                <input
+                  type="text"
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  placeholder="VD: Công thức Toán cần nhớ, Việc cần làm..."
+                  className="w-full px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/15 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Nội dung ghi chú *
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  placeholder="Nhập nội dung ghi chú cá nhân của bạn..."
+                  className="w-full px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/15 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Màu thẻ ghi chú
+                </label>
+                <div className="flex items-center gap-2">
+                  {Object.entries(NOTE_COLORS).map(([key, cfg]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setNoteColor(key)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+                        noteColor === key
+                          ? `${cfg.card} text-white border-white/40`
+                          : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                      <span>{cfg.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowNoteModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-500/20 transition-all cursor-pointer"
+                >
+                  {editingNoteId ? 'Cập nhật' : 'Lưu ghi chú'}
                 </button>
               </div>
             </form>
