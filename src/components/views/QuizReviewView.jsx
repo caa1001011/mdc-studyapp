@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   HelpCircle,
   Clock,
@@ -23,7 +23,8 @@ import {
   Sparkles,
   FileText,
   X,
-  Play
+  Play,
+  Pencil
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { STUDY_SUBJECTS } from '../../data/mockData';
@@ -72,8 +73,9 @@ export default function QuizReviewView({ currentUser: propsUser }) {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
 
-  // Admin Create/Upload Exam Modal state
+  // Admin Create/Edit/Upload Exam Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingExamId, setEditingExamId] = useState(null);
   const [createMethod, setCreateMethod] = useState('manual'); // 'manual' | 'ai'
   const [examTitle, setExamTitle] = useState('');
   const [examDuration, setExamDuration] = useState(45);
@@ -82,8 +84,10 @@ export default function QuizReviewView({ currentUser: propsUser }) {
   const [docFile, setDocFile] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiGeneratedNotice, setAiGeneratedNotice] = useState('');
   const [isSavingExam, setIsSavingExam] = useState(false);
   const [modalError, setModalError] = useState('');
+  const questionsSectionRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,12 +162,38 @@ export default function QuizReviewView({ currentUser: propsUser }) {
 
   // Admin: Modal helpers
   const openCreateModal = () => {
+    setEditingExamId(null);
     setCreateMethod('manual');
     setExamTitle('');
     setExamDuration(45);
     setDraftQuestions([EMPTY_QUESTION()]);
     setDocText('');
     setDocFile(null);
+    setAiGeneratedNotice('');
+    setModalError('');
+    setIsCreateModalOpen(true);
+  };
+
+  const openEditModal = (exam, e) => {
+    e.stopPropagation();
+    setEditingExamId(exam.id);
+    setCreateMethod('manual');
+    setExamTitle(exam.title || '');
+    setExamDuration(exam.durationMinutes || 45);
+    setDraftQuestions(
+      Array.isArray(exam.questions) && exam.questions.length > 0
+        ? exam.questions.map((q, idx) => ({
+            id: q.id || `q-edit-${Date.now()}-${idx}`,
+            question: q.question || '',
+            options: Array.isArray(q.options) && q.options.length === 4 ? [...q.options] : ['A. ', 'B. ', 'C. ', 'D. '],
+            correctIndex: Number(q.correctIndex) || 0,
+            explanation: q.explanation || '',
+          }))
+        : [EMPTY_QUESTION()]
+    );
+    setDocText('');
+    setDocFile(null);
+    setAiGeneratedNotice('');
     setModalError('');
     setIsCreateModalOpen(true);
   };
@@ -205,6 +235,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
 
   const handleGenerateWithAI = async () => {
     setModalError('');
+    setAiGeneratedNotice('');
     setIsGeneratingAI(true);
     try {
       const generated = await generateQuestionsFromDocument(
@@ -212,6 +243,12 @@ export default function QuizReviewView({ currentUser: propsUser }) {
         geminiApiKey
       );
       setDraftQuestions(generated);
+      setAiGeneratedNotice(
+        `AI đã tạo ${generated.length} câu hỏi. Hãy xem, chỉnh sửa và duyệt bộ đề bên dưới trước khi lưu cho học sinh.`
+      );
+      setTimeout(() => {
+        questionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
     } catch (err) {
       setModalError(err.message || 'Không thể tạo câu hỏi từ tài liệu.');
     } finally {
@@ -256,6 +293,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
     setIsSavingExam(true);
     try {
       const saved = await saveExam({
+        id: editingExamId || undefined,
         subjectId: selectedSubject.id,
         subjectName: selectedSubject.name,
         categoryId: selectedCategory.id,
@@ -704,14 +742,24 @@ export default function QuizReviewView({ currentUser: propsUser }) {
                       <span>{isAdmin ? 'Làm Thử' : 'Làm Đề'}</span>
                     </span>
                     {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteExam(exam.id, e)}
-                        className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/20 cursor-pointer"
-                        title="Xóa đề thi"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => openEditModal(exam, e)}
+                          className="p-2 rounded-xl text-amber-300 hover:bg-amber-500/20 cursor-pointer"
+                          title="Chỉnh sửa đề thi"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteExam(exam.id, e)}
+                          className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                          title="Xóa đề thi"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -732,7 +780,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-white font-display">
-                    Up / Tạo Đề Thi Mới
+                    {editingExamId ? 'Chỉnh Sửa Đề Thi' : 'Up / Tạo Đề Thi Mới'}
                   </h2>
                   <p className="text-[11px] text-slate-400">
                     {selectedSubject?.name} • {selectedCategory?.name}
@@ -887,11 +935,20 @@ export default function QuizReviewView({ currentUser: propsUser }) {
                 </div>
               )}
 
-              {/* Danh sách câu hỏi soạn thảo */}
-              <div className="space-y-3">
+              {/* Danh sách câu hỏi soạn thảo / xem lại & duyệt */}
+              <div ref={questionsSectionRef} className="space-y-3 pt-1">
+                {aiGeneratedNotice && (
+                  <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>{aiGeneratedNotice}</span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300">
-                    Danh sách câu hỏi ({draftQuestions.length} câu)
+                    {createMethod === 'ai'
+                      ? `Xem lại, chỉnh sửa & duyệt bộ đề (${draftQuestions.length} câu)`
+                      : `Danh sách câu hỏi (${draftQuestions.length} câu)`}
                   </span>
                   <button
                     type="button"
