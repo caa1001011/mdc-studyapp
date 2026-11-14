@@ -32,9 +32,9 @@ export async function fetchTextbookDecks() {
 }
 
 /**
- * Admin: Tạo hoặc cập nhật một bộ thẻ Sách Giáo Khoa (theo Unit)
+ * Admin: Tạo hoặc cập nhật một bộ thẻ Sách Giáo Khoa (theo Unit / Bài học)
  */
-export async function saveTextbookDeck({ id, title, unit, cards, createdBy }) {
+export async function saveTextbookDeck({ id, title, bookName, grade, coverImage, cards, createdBy }) {
   if (!db) {
     throw new Error('Chưa kết nối Firebase Firestore.');
   }
@@ -43,7 +43,9 @@ export async function saveTextbookDeck({ id, title, unit, cards, createdBy }) {
   const deckData = {
     id: deckId,
     title: title.trim(),
-    unit: unit?.trim() || '',
+    bookName: bookName?.trim() || '',
+    grade: grade?.trim() || '',
+    coverImage: coverImage || '',
     subject: 'Tiếng Anh',
     sourceType: 'textbook',
     cards: cards || [],
@@ -54,6 +56,41 @@ export async function saveTextbookDeck({ id, title, unit, cards, createdBy }) {
 
   await setDoc(doc(db, TEXTBOOK_DECKS_COLLECTION, deckId), deckData, { merge: true });
   return deckData;
+}
+
+/**
+ * Nén ảnh bìa sách về kích thước gọn nhẹ để lưu trữ nhanh và hiển thị mượt mà
+ */
+export function compressCoverImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Không thể đọc tệp ảnh bìa.'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Tệp ảnh không hợp lệ.'));
+      img.onload = () => {
+        const maxSide = 320;
+        let { width, height } = img;
+        if (width > maxSide || height > maxSide) {
+          if (width >= height) {
+            height = Math.round((height * maxSide) / width);
+            width = maxSide;
+          } else {
+            width = Math.round((width * maxSide) / height);
+            height = maxSide;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.78));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -205,18 +242,21 @@ function parseVocabularyFromText(rawText) {
 }
 
 /**
- * Gọi AI (Gemini API nếu có VITE_GEMINI_API_KEY, hoặc bộ phân tích thông minh) để tạo flashcard từ tài liệu
+ * Gọi AI (Gemini API nếu có VITE_GEMINI_API_KEY, hoặc bộ phân tích thông minh) để tạo flashcard từ tài liệu (văn bản hoặc file PDF/DOC/DOCX/TXT...)
  */
-export async function generateFlashcardsFromDocument(documentText, customApiKey = '') {
-  const text = (documentText || '').trim();
-  if (!text) {
-    throw new Error('Vui lòng nhập nội dung tài liệu hoặc tải tệp văn bản lên.');
+export async function generateFlashcardsFromDocument(documentInput, customApiKey = '') {
+  const isObj = typeof documentInput === 'object' && documentInput !== null;
+  const text = (isObj ? documentInput.text : documentInput || '').trim();
+  const fileData = isObj ? documentInput.fileData : null;
+
+  if (!text && !fileData) {
+    throw new Error('Vui lòng nhập nội dung tài liệu hoặc chọn tệp tài liệu.');
   }
 
   const apiKey = (customApiKey || import.meta.env.VITE_GEMINI_API_KEY || '').trim();
 
   if (apiKey) {
-    const prompt = `Bạn là trợ lý học từ vựng Tiếng Anh THPT. Hãy trích xuất các từ vựng Tiếng Anh quan trọng từ tài liệu sau và trả về DUY NHẤT một mảng JSON hợp lệ (không markdown, không giải thích thêm).
+    const promptText = `Bạn là trợ lý học từ vựng Tiếng Anh THPT. Hãy trích xuất các từ vựng Tiếng Anh quan trọng từ tài liệu sau và trả về DUY NHẤT một mảng JSON hợp lệ (không markdown, không giải thích thêm).
 Mỗi phần tử trong mảng có cấu trúc:
 {
   "front": "Từ vựng Tiếng Anh (kèm từ loại nếu có, ví dụ: Ubiquitous (adj))",
@@ -224,10 +264,17 @@ Mỗi phần tử trong mảng có cấu trúc:
   "back": "Nghĩa tiếng Việt ngắn gọn, dễ hiểu",
   "hint": "Gợi ý ngắn bằng tiếng Việt",
   "example": "1 câu ví dụ Tiếng Anh ngắn"
-}
+}${text ? `\n\nNội dung tài liệu:\n${text.slice(0, 12000)}` : ''}`;
 
-Tài liệu:
-${text.slice(0, 12000)}`;
+    const parts = [{ text: promptText }];
+    if (fileData?.base64 && fileData?.mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: fileData.mimeType,
+          data: fileData.base64,
+        },
+      });
+    }
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -235,7 +282,7 @@ ${text.slice(0, 12000)}`;
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts }],
           generationConfig: { temperature: 0.3 },
         }),
       }
@@ -244,7 +291,7 @@ ${text.slice(0, 12000)}`;
     if (!response.ok) {
       const errBody = await response.text();
       console.error('Lỗi Gemini API:', errBody);
-      throw new Error('Không thể gọi AI Gemini. Vui lòng kiểm tra lại API Key hoặc thử lại.');
+      throw new Error('Không thể gọi AI Gemini. Vui lòng kiểm tra lại API Key hoặc định dạng tệp.');
     }
 
     const data = await response.json();
@@ -265,6 +312,12 @@ ${text.slice(0, 12000)}`;
         hint: String(item.hint || '').trim(),
         example: String(item.example || '').trim(),
       }));
+  }
+
+  if (fileData && !text) {
+    throw new Error(
+      'Để AI đọc trực tiếp tệp PDF/DOC/DOCX, vui lòng nhập Gemini API Key (hoặc dán nội dung văn bản dạng "Từ vựng - Nghĩa").'
+    );
   }
 
   // Fallback phân tích trực tiếp tài liệu dạng danh sách từ vựng

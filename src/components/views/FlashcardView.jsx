@@ -13,7 +13,8 @@ import {
   Trash2,
   Upload,
   Loader2,
-  Save
+  Save,
+  Image as ImageIcon
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
@@ -24,6 +25,7 @@ import {
   fetchUserFlashcardDecks,
   saveUserFlashcardDeck,
   deleteUserFlashcardDeck,
+  compressCoverImage,
   generateFlashcardsFromDocument
 } from '../../services/flashcardService';
 
@@ -60,11 +62,15 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [createTarget, setCreateTarget] = useState('personal'); // 'personal' | 'textbook'
   const [createMethod, setCreateMethod] = useState('manual'); // 'manual' | 'ai'
   const [deckTitle, setDeckTitle] = useState('');
-  const [deckUnit, setDeckUnit] = useState('');
+  const [bookName, setBookName] = useState('');
+  const [grade, setGrade] = useState('');
+  const [coverImage, setCoverImage] = useState('');
+  const [isProcessingCover, setIsProcessingCover] = useState(false);
   const [draftCards, setDraftCards] = useState([EMPTY_CARD()]);
 
   // AI Document import state
   const [docText, setDocText] = useState('');
+  const [docFile, setDocFile] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [modalError, setModalError] = useState('');
@@ -187,22 +193,67 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setCreateTarget(target);
     setCreateMethod('manual');
     setDeckTitle('');
-    setDeckUnit('');
+    setBookName('');
+    setGrade('');
+    setCoverImage('');
     setDraftCards([EMPTY_CARD()]);
     setDocText('');
+    setDocFile(null);
     setModalError('');
     setIsCreateModalOpen(true);
   };
 
-  // Đọc file tài liệu text (.txt, .md, .csv)
+  // Tải & nén ảnh bìa sách (dành cho Admin)
+  const handleCoverImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setModalError('');
+    setIsProcessingCover(true);
+    try {
+      const compressed = await compressCoverImage(file);
+      setCoverImage(compressed);
+    } catch (err) {
+      setModalError(err.message || 'Không thể xử lý ảnh bìa.');
+    } finally {
+      setIsProcessingCover(false);
+      e.target.value = '';
+    }
+  };
+
+  // Đọc file tài liệu (.pdf, .doc, .docx, .txt, .md, .csv, .rtf)
   const handleDocumentFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setModalError('');
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isPlainText = ['txt', 'md', 'csv', 'rtf'].includes(ext) || file.type.startsWith('text/');
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setDocText(String(ev.target?.result || ''));
-    };
-    reader.readAsText(file, 'UTF-8');
+    if (isPlainText) {
+      reader.onload = (ev) => {
+        setDocText(String(ev.target?.result || ''));
+        setDocFile(null);
+      };
+      reader.readAsText(file, 'UTF-8');
+    } else {
+      reader.onload = (ev) => {
+        const dataUrl = String(ev.target?.result || '');
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        const mimeMap = {
+          pdf: 'application/pdf',
+          doc: 'application/msword',
+          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        };
+        setDocFile({
+          name: file.name,
+          mimeType: file.type || mimeMap[ext] || 'application/octet-stream',
+          base64,
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
   };
 
   // Gọi AI tạo thẻ từ tài liệu
@@ -210,7 +261,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setModalError('');
     setIsGeneratingAI(true);
     try {
-      const generated = await generateFlashcardsFromDocument(docText, geminiApiKey);
+      const generated = await generateFlashcardsFromDocument(
+        { text: docText, fileData: docFile },
+        geminiApiKey
+      );
       setDraftCards(generated);
     } catch (err) {
       setModalError(err.message || 'Không thể tạo thẻ từ tài liệu.');
@@ -254,7 +308,9 @@ export default function FlashcardView({ currentUser: propsUser }) {
       if (createTarget === 'textbook' && isAdmin) {
         const saved = await saveTextbookDeck({
           title: deckTitle,
-          unit: deckUnit,
+          bookName,
+          grade,
+          coverImage,
           cards: validCards,
           createdBy: username,
         });
@@ -363,29 +419,44 @@ export default function FlashcardView({ currentUser: propsUser }) {
                           : 'border-white/10 hover:border-white/20'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">
-                          {deck.unit || 'Sách Giáo Khoa'}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-slate-400">
-                            {deck.cards?.length || 0} từ
-                          </span>
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteDeck(deck, e)}
-                              className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Xóa bộ thẻ SGK"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                      <div className="flex items-start gap-3">
+                        {deck.coverImage ? (
+                          <img
+                            src={deck.coverImage}
+                            alt={deck.bookName || deck.title}
+                            className="w-11 h-14 rounded-lg object-cover border border-white/15 shrink-0 bg-white/5"
+                          />
+                        ) : (
+                          <div className="w-11 h-14 rounded-lg border border-white/10 bg-amber-500/10 flex items-center justify-center shrink-0">
+                            <BookOpen className="w-5 h-5 text-amber-300/70" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 truncate">
+                              {[deck.bookName || deck.unit || 'Sách Giáo Khoa', deck.grade].filter(Boolean).join(' • ')}
+                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] text-slate-400">
+                                {deck.cards?.length || 0} từ
+                              </span>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteDeck(deck, e)}
+                                  className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Xóa bộ thẻ SGK"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <h4 className="text-sm font-bold text-white mt-1 line-clamp-2 font-display">
+                            {deck.title}
+                          </h4>
                         </div>
                       </div>
-                      <h4 className="text-sm font-bold text-white mt-1.5 line-clamp-2 font-display">
-                        {deck.title}
-                      </h4>
                     </div>
                   );
                 })}
@@ -498,7 +569,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   <div className="col-start-1 row-start-1 w-full backface-hidden rounded-3xl p-6 sm:p-7 flex flex-col justify-between gap-5 border border-purple-500/40 shadow-2xl bg-gradient-to-b from-[#141628] via-[#0d0f1b] to-[#07080f]">
                     <div className="flex items-center justify-between gap-2">
                       <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-200 border border-purple-400/30">
-                        {currentDeck.unit || 'Tiếng Anh'}
+                        {currentDeck.bookName || currentDeck.unit || 'Tiếng Anh'}
                       </span>
                       <div className="flex items-center gap-1.5 text-slate-400 text-xs">
                         <Sparkles className="w-3.5 h-3.5 text-purple-400" />
@@ -701,72 +772,108 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </div>
               )}
 
-              {/* Dành cho Admin: chọn lưu vào Sách Giáo Khoa (Unit) hoặc Bộ Thẻ Cá Nhân */}
-              {isAdmin && (
-                <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.04] border border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setCreateTarget('textbook')}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      createTarget === 'textbook'
-                        ? 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>Sách Giáo Khoa (Theo Unit)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCreateTarget('personal')}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      createTarget === 'personal'
-                        ? 'bg-purple-600/35 text-white border border-purple-400/40'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Bộ Thẻ Cá Nhân</span>
-                  </button>
-                </div>
-              )}
+              {/* Thông tin bộ thẻ */}
+              {createTarget === 'textbook' ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Tên bài học (Unit / Bài) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="VD: Unit 1 - Bài 1: Life Stories"
+                        value={deckTitle}
+                        onChange={(e) => setDeckTitle(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Khối *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="VD: Khối 12"
+                        value={grade}
+                        onChange={(e) => setGrade(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+                  </div>
 
-              {/* Tên bộ thẻ & Unit (nếu là SGK) */}
-              <div className={`grid gap-3 ${createTarget === 'textbook' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'}`}>
-                <div className={createTarget === 'textbook' ? 'sm:col-span-2' : ''}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Tên sách *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="VD: Global Success 12"
+                        value={bookName}
+                        onChange={(e) => setBookName(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Ảnh bìa sách (tùy chọn)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl glass-button text-xs font-semibold text-amber-200 cursor-pointer">
+                          {isProcessingCover ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5" />
+                          )}
+                          <span>{coverImage ? 'Đổi ảnh bìa' : 'Chèn ảnh bìa'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleCoverImageUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {coverImage && (
+                          <div className="relative flex items-center gap-2">
+                            <img
+                              src={coverImage}
+                              alt="Bìa sách"
+                              className="w-10 h-12 rounded-lg object-cover border border-white/20"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setCoverImage('')}
+                              className="p-1 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 cursor-pointer"
+                              title="Xóa ảnh bìa"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Tên bộ thẻ *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder={
-                      createTarget === 'textbook'
-                        ? 'VD: Tiếng Anh 12 - Unit 1: Life Stories'
-                        : 'Đặt tên bộ thẻ của bạn...'
-                    }
+                    placeholder="Đặt tên bộ thẻ của bạn..."
                     value={deckTitle}
                     onChange={(e) => setDeckTitle(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
                   />
                 </div>
-
-                {createTarget === 'textbook' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Unit / Sách *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="VD: Unit 1"
-                      value={deckUnit}
-                      onChange={(e) => setDeckUnit(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                    />
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* Chuyển đổi phương pháp: Nhập thủ công | Đưa tài liệu cho AI tạo */}
               <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.04] border border-white/10">
@@ -803,19 +910,33 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
                       <Wand2 className="w-3.5 h-3.5" />
-                      Dán nội dung tài liệu hoặc tải tệp văn bản (.txt, .md, .csv)
+                      Dán nội dung tài liệu hoặc tải tệp (.pdf, .doc, .docx, .txt, .md, .csv)
                     </span>
                     <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer">
                       <Upload className="w-3.5 h-3.5" />
                       <span>Chọn Tệp Tài Liệu</span>
                       <input
                         type="file"
-                        accept=".txt,.md,.csv"
+                        accept=".pdf,.doc,.docx,.txt,.md,.csv,.rtf"
                         onChange={handleDocumentFileUpload}
                         className="hidden"
                       />
                     </label>
                   </div>
+
+                  {docFile && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-purple-500/15 border border-purple-400/30 text-xs text-purple-200">
+                      <span className="truncate font-semibold">Đã chọn tệp: {docFile.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDocFile(null)}
+                        className="p-1 rounded-lg hover:bg-purple-500/30 text-purple-200 cursor-pointer shrink-0"
+                        title="Bỏ chọn tệp"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
                   <textarea
                     rows={5}
@@ -839,7 +960,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     <button
                       type="button"
                       onClick={handleGenerateWithAI}
-                      disabled={isGeneratingAI || !docText.trim()}
+                      disabled={isGeneratingAI || (!docText.trim() && !docFile)}
                       className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                     >
                       {isGeneratingAI ? (
