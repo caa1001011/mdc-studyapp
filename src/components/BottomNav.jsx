@@ -4,7 +4,6 @@ import {
   CalendarDays,
   BookOpen,
   Layers,
-  Timer,
   Gamepad2
 } from 'lucide-react';
 
@@ -13,7 +12,6 @@ const MOBILE_NAV = [
   { id: 'timetable', label: 'Lịch Học', icon: CalendarDays },
   { id: 'study', label: 'Bài Tập', icon: BookOpen },
   { id: 'flashcards', label: 'Thẻ Nhớ', icon: Layers },
-  { id: 'pomodoro', label: 'Pomodoro', icon: Timer },
   { id: 'games', label: 'Đấu Trường', icon: Gamepad2 },
 ];
 

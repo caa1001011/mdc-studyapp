@@ -12,7 +12,6 @@ const TimetableView = lazy(() => import('./components/views/TimetableView'));
 const StudySpaceView = lazy(() => import('./components/views/StudySpaceView'));
 const FlashcardView = lazy(() => import('./components/views/FlashcardView'));
 const QuizReviewView = lazy(() => import('./components/views/QuizReviewView'));
-const PomodoroView = lazy(() => import('./components/views/PomodoroView'));
 const GamificationView = lazy(() => import('./components/views/GamificationView'));
 const UserManagementView = lazy(() => import('./components/views/UserManagementView'));
 
@@ -87,8 +86,6 @@ export default function App() {
         return <FlashcardView currentUser={currentUser} />;
       case 'quiz':
         return <QuizReviewView />;
-      case 'pomodoro':
-        return <PomodoroView />;
       case 'games':
         return <GamificationView />;
       case 'users':

@@ -5,7 +5,6 @@ import {
   BookOpen,
   Layers,
   HelpCircle,
-  Timer,
   Gamepad2,
   Music,
   Play,
@@ -22,7 +21,6 @@ export const NAV_ITEMS = [
   { id: 'study', label: 'Bài Học', icon: BookOpen, badge: null },
   { id: 'flashcards', label: 'Thẻ Ghi Nhớ (Flashcard)', icon: Layers, badge: null },
   { id: 'quiz', label: 'Luyện Đề & Ôn Thi', icon: HelpCircle, badge: null },
-  { id: 'pomodoro', label: 'Đồng Hồ Pomodoro', icon: Timer, badge: null },
   { id: 'games', label: 'Trò Chơi Học Tập', icon: Gamepad2, badge: null },
 ];
 
