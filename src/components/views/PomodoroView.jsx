@@ -1,86 +1,175 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Timer,
   Play,
   Pause,
   RotateCcw,
   SkipForward,
-  Volume2,
-  VolumeX,
   Sparkles,
-  Music,
   CheckCircle2,
-  ListTodo
+  ListTodo,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { getSessionUser } from '../../services/authService';
 
-const MODES = [
-  { id: 'focus', label: 'Tập Trung', minutes: 25, color: 'purple' },
-  { id: 'short', label: 'Nghỉ Ngắn', minutes: 5, color: 'emerald' },
-  { id: 'long', label: 'Nghỉ Dài', minutes: 15, color: 'cyan' },
+const CYCLE_PRESETS = [
+  { id: '25-5', label: '25p / 5p', focus: 25, breakTime: 5 },
+  { id: '50-10', label: '50p / 10p', focus: 50, breakTime: 10 },
 ];
 
-const SOUND_TRACKS = [
-  { id: 'rain', name: 'Tiếng Mưa Rơi', desc: 'Tạo không gian yên tĩnh', icon: '🌧️' },
-  { id: 'lofi', name: 'Nhạc Lo-Fi Êm Dịu', desc: 'Giai điệu nhẹ nhàng', icon: '☕' },
-  { id: 'waves', name: 'Tiếng Sóng Biển', desc: 'Thư giãn đầu óc', icon: '🌊' },
-  { id: 'forest', name: 'Tiếng Rừng Cây', desc: 'Gần gũi với thiên nhiên', icon: '🌲' },
-];
+function getTodayKey(username) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `lumina_pomodoro_sessions_${username}_${y}-${m}-${d}`;
+}
 
 export default function PomodoroView() {
-  const [activeMode, setActiveMode] = useState(MODES[0]);
-  const [secondsLeft, setSecondsLeft] = useState(MODES[0].minutes * 60);
+  const sessionUser = getSessionUser();
+  const username = sessionUser?.username || 'student';
+
+  // Chu kỳ học / nghỉ (mặc định 25p học - 5p nghỉ)
+  const [focusMinutes, setFocusMinutes] = useState(25);
+  const [breakMinutes, setBreakMinutes] = useState(5);
+  const [phase, setPhase] = useState('focus'); // 'focus' | 'break'
+  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
-  const [sessionsCompleted, setSessionsCompleted] = useState(4);
-  const [selectedSound, setSelectedSound] = useState(SOUND_TRACKS[0].id);
-  const [isSoundPlaying, setIsSoundPlaying] = useState(false);
 
-  // Session tasks state
-  const [focusTasks, setFocusTasks] = useState([
-    { id: 1, text: 'Giải 3 bài tập tích phân trong sách bài tập', done: true },
-    { id: 2, text: 'Học 15 từ vựng Tiếng Anh bài 4', done: false },
-    { id: 3, text: 'Làm đề kiểm tra 15 phút môn Vật Lý', done: false },
-  ]);
+  // Số phiên học hôm nay
+  const [sessionsCompleted, setSessionsCompleted] = useState(() => {
+    const saved = localStorage.getItem(getTodayKey(username));
+    return saved ? Math.max(0, parseInt(saved, 10) || 0) : 0;
+  });
 
-  // Timer Tick
+  // Mục tiêu phiên này (người học tự thêm / sửa / xóa)
+  const [focusTasks, setFocusTasks] = useState(() => {
+    const saved = localStorage.getItem(`lumina_pomodoro_tasks_${username}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [newTaskText, setNewTaskText] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingTaskText, setEditingTaskText] = useState('');
+
   useEffect(() => {
-    let interval = null;
-    if (isRunning && secondsLeft > 0) {
-      interval = setInterval(() => {
-        setSecondsLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (secondsLeft === 0 && isRunning) {
-      setIsRunning(false);
+    localStorage.setItem(getTodayKey(username), String(sessionsCompleted));
+  }, [sessionsCompleted, username]);
+
+  useEffect(() => {
+    localStorage.setItem(`lumina_pomodoro_tasks_${username}`, JSON.stringify(focusTasks));
+  }, [focusTasks, username]);
+
+  const completeCurrentSession = (currentPhase) => {
+    setIsRunning(false);
+    if (currentPhase === 'focus') {
       setSessionsCompleted((prev) => prev + 1);
       confetti({
-        particleCount: 80,
-        spread: 70,
+        particleCount: 70,
+        spread: 65,
         origin: { y: 0.6 },
       });
     }
-    return () => clearInterval(interval);
-  }, [isRunning, secondsLeft]);
+  };
 
-  const handleModeChange = (mode) => {
-    setActiveMode(mode);
-    setSecondsLeft(mode.minutes * 60);
+  // Timer Tick
+  useEffect(() => {
+    if (!isRunning) return;
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          completeCurrentSession(phase);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isRunning, phase]);
+
+  const handlePhaseChange = (nextPhase) => {
+    setPhase(nextPhase);
     setIsRunning(false);
+    setSecondsLeft((nextPhase === 'focus' ? focusMinutes : breakMinutes) * 60);
+  };
+
+  const handleApplyCycle = (nextFocus, nextBreak) => {
+    const safeFocus = Math.max(1, Math.min(180, Number(nextFocus) || 25));
+    const safeBreak = Math.max(1, Math.min(60, Number(nextBreak) || 5));
+    setFocusMinutes(safeFocus);
+    setBreakMinutes(safeBreak);
+    setIsRunning(false);
+    setSecondsLeft((phase === 'focus' ? safeFocus : safeBreak) * 60);
   };
 
   const handleReset = () => {
-    setSecondsLeft(activeMode.minutes * 60);
     setIsRunning(false);
+    setSecondsLeft((phase === 'focus' ? focusMinutes : breakMinutes) * 60);
+  };
+
+  const handleSkip = () => {
+    setSecondsLeft(0);
+    completeCurrentSession(phase);
+  };
+
+  // Task CRUD
+  const handleAddTask = (e) => {
+    e.preventDefault();
+    const trimmed = newTaskText.trim();
+    if (!trimmed) return;
+    setFocusTasks((prev) => [
+      ...prev,
+      { id: `task-${Date.now()}`, text: trimmed, done: false },
+    ]);
+    setNewTaskText('');
   };
 
   const toggleTask = (id) => {
-    setFocusTasks(
-      focusTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
+    if (editingTaskId === id) return;
+    setFocusTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
     );
   };
 
-  const totalSeconds = activeMode.minutes * 60;
+  const startEditTask = (task, e) => {
+    e.stopPropagation();
+    setEditingTaskId(task.id);
+    setEditingTaskText(task.text);
+  };
+
+  const saveEditTask = (id, e) => {
+    e?.stopPropagation();
+    const trimmed = editingTaskText.trim();
+    if (!trimmed) return;
+    setFocusTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, text: trimmed } : t))
+    );
+    setEditingTaskId(null);
+    setEditingTaskText('');
+  };
+
+  const deleteTask = (id, e) => {
+    e.stopPropagation();
+    setFocusTasks((prev) => prev.filter((t) => t.id !== id));
+    if (editingTaskId === id) {
+      setEditingTaskId(null);
+    }
+  };
+
+  const totalSeconds = Math.max(1, (phase === 'focus' ? focusMinutes : breakMinutes) * 60);
   const progressPercent = ((totalSeconds - secondsLeft) / totalSeconds) * 100;
-  const radius = 145;
+  const radius = 94;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
 
@@ -89,102 +178,232 @@ export default function PomodoroView() {
   const timeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
   return (
-    <div className="space-y-6 md:space-y-8 pb-10">
-      {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold mb-2">
-            <Timer className="w-3.5 h-3.5 text-purple-300" />
-            <span>Phương Pháp Quản Lý Thời Gian Pomodoro</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
-            Đồng Hồ Pomodoro
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Học tập trung 25 phút, nghỉ ngắn 5 phút giúp học bài lâu mà không bị mệt mỏi
-          </p>
-        </div>
+    <div className="space-y-5 pb-10">
+      {/* 1. Header: Chỉ giữ lại dòng "Đồng hồ Pomodoro" */}
+      <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
+        Đồng hồ Pomodoro
+      </h1>
 
-        {/* Mode Selector */}
-        <div className="flex items-center gap-2 p-1 rounded-2xl bg-white/[0.04] border border-white/10">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => handleModeChange(m)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-                activeMode.id === m.id
-                  ? 'bg-purple-600/35 text-white border border-purple-400/50 shadow-md shadow-purple-500/20'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {m.label} ({m.minutes}p)
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 2. Desktop 3-Column Focus Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* Left (1 col): Tasks */}
-        <div className="rounded-3xl glass-card p-6 border border-white/10 space-y-4">
+      {/* 2. Compact 2-Column Focus Layout (Mục tiêu phiên này + Đồng hồ thu gọn) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+        {/* Left (2 cols): Mục Tiêu Phiên Này (có thể chỉnh sửa tùy người học) */}
+        <div className="lg:col-span-2 rounded-2xl glass-card p-5 border border-white/10 space-y-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ListTodo className="w-4 h-4 text-purple-400" />
               <h3 className="text-sm font-bold font-display text-white">Mục Tiêu Phiên Này</h3>
             </div>
-            <span className="text-[10px] text-purple-300 font-mono">
+            <span className="text-[11px] text-purple-300 font-mono">
               {focusTasks.filter((t) => t.done).length}/{focusTasks.length} xong
             </span>
           </div>
 
-          <p className="text-xs text-slate-400">
-            Chọn 1 việc cần làm và tập trung giải quyết xong trong phiên này.
-          </p>
+          <form onSubmit={handleAddTask} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newTaskText}
+              onChange={(e) => setNewTaskText(e.target.value)}
+              placeholder="Thêm mục tiêu cho phiên học..."
+              className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+            />
+            <button
+              type="submit"
+              disabled={!newTaskText.trim()}
+              className="p-2 rounded-xl bg-purple-600/40 border border-purple-400/40 text-white hover:bg-purple-600/60 disabled:opacity-40 cursor-pointer shrink-0"
+              title="Thêm mục tiêu"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </form>
 
-          <div className="space-y-2.5 pt-1">
-            {focusTasks.map((t) => (
-              <div
-                key={t.id}
-                onClick={() => toggleTask(t.id)}
-                className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
-                  t.done
-                    ? 'bg-white/[0.02] border-white/5 opacity-60'
-                    : 'bg-white/[0.04] border-white/10 hover:border-purple-400/30'
-                }`}
-              >
-                <div className="mt-0.5 text-purple-400">
-                  {t.done ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-400/20" />
-                  ) : (
-                    <div className="w-4 h-4 rounded-full border border-slate-500" />
-                  )}
-                </div>
-                <span className={`text-xs ${t.done ? 'line-through text-slate-400' : 'text-slate-200'}`}>
-                  {t.text}
-                </span>
-              </div>
-            ))}
-          </div>
+          {focusTasks.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-white/10 rounded-xl">
+              Chưa có mục tiêu nào. Hãy thêm việc cần làm ở trên.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {focusTasks.map((t) => {
+                const isEditing = editingTaskId === t.id;
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => toggleTask(t.id)}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-2 group ${
+                      t.done
+                        ? 'bg-white/[0.02] border-white/5 opacity-65'
+                        : 'bg-white/[0.04] border-white/10 hover:border-purple-400/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="shrink-0 text-purple-400">
+                        {t.done ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-400/20" />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full border border-slate-500" />
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editingTaskText}
+                          onChange={(e) => setEditingTaskText(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              saveEditTask(t.id);
+                            } else if (e.key === 'Escape') {
+                              setEditingTaskId(null);
+                            }
+                          }}
+                          autoFocus
+                          className="w-full px-2 py-1 rounded-lg bg-white/10 border border-purple-400/50 text-xs text-white focus:outline-none"
+                        />
+                      ) : (
+                        <span className={`text-xs truncate ${t.done ? 'line-through text-slate-400' : 'text-slate-200'}`}>
+                          {t.text}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => saveEditTask(t.id, e)}
+                            className="p-1 rounded-lg text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                            title="Lưu"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTaskId(null);
+                            }}
+                            className="p-1 rounded-lg text-slate-400 hover:bg-white/10 cursor-pointer"
+                            title="Hủy"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => startEditTask(t, e)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => deleteTask(t.id, e)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Center (2 cols): Clock */}
-        <div className="lg:col-span-2 rounded-3xl glass-card p-8 border border-purple-500/25 flex flex-col items-center justify-center relative overflow-hidden">
-          <div
-            className={`absolute w-80 h-80 rounded-full blur-[90px] transition-all duration-1000 ${
-              isRunning
-                ? 'bg-gradient-to-tr from-purple-600 via-pink-600 to-cyan-500 opacity-60 animate-pulse'
-                : 'bg-purple-900/30 opacity-40'
-            }`}
-          />
+        {/* Right (3 cols): Khung Đồng Hồ Thu Gọn */}
+        <div className="lg:col-span-3 rounded-2xl glass-card p-5 sm:p-6 border border-purple-500/25 flex flex-col items-center justify-center relative overflow-hidden space-y-4">
+          {/* Điều chỉnh chu kỳ thời gian học / nghỉ & chuyển trạng thái */}
+          <div className="w-full flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10 z-10">
+            {/* Chuyển Học / Nghỉ */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/10">
+              <button
+                type="button"
+                onClick={() => handlePhaseChange('focus')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  phase === 'focus'
+                    ? 'bg-purple-600/40 text-white border border-purple-400/50'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Học ({focusMinutes}p)
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePhaseChange('break')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  phase === 'break'
+                    ? 'bg-emerald-600/40 text-white border border-emerald-400/50'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Nghỉ ({breakMinutes}p)
+              </button>
+            </div>
 
-          <div className="relative w-[340px] h-[340px] flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90 drop-shadow-2xl">
+            {/* Preset + Tùy chỉnh chu kỳ */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {CYCLE_PRESETS.map((preset) => {
+                const isActivePreset =
+                  focusMinutes === preset.focus && breakMinutes === preset.breakTime;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleApplyCycle(preset.focus, preset.breakTime)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                      isActivePreset
+                        ? 'bg-purple-500/25 border-purple-400/50 text-purple-200'
+                        : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+
+              <div className="flex items-center gap-1 text-[11px] text-slate-300 bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1">
+                <span>Học</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={focusMinutes}
+                  onChange={(e) => handleApplyCycle(e.target.value, breakMinutes)}
+                  className="w-10 bg-transparent text-center font-mono font-bold text-white focus:outline-none"
+                  title="Số phút học"
+                />
+                <span className="text-slate-500">/</span>
+                <span>Nghỉ</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={breakMinutes}
+                  onChange={(e) => handleApplyCycle(focusMinutes, e.target.value)}
+                  className="w-9 bg-transparent text-center font-mono font-bold text-emerald-300 focus:outline-none"
+                  title="Số phút nghỉ"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Đồng hồ đếm ngược thu gọn */}
+          <div className="relative w-[220px] h-[220px] flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90 drop-shadow-xl">
               <circle
                 cx="50%"
                 cy="50%"
                 r={radius}
-                stroke="rgba(255, 255, 255, 0.05)"
-                strokeWidth="10"
+                stroke="rgba(255, 255, 255, 0.06)"
+                strokeWidth="8"
                 fill="transparent"
               />
               <circle
@@ -192,12 +411,12 @@ export default function PomodoroView() {
                 cy="50%"
                 r={radius}
                 stroke="url(#auraStudioGradient)"
-                strokeWidth="10"
+                strokeWidth="8"
                 fill="transparent"
                 strokeDasharray={circumference}
                 strokeDashoffset={strokeDashoffset}
                 strokeLinecap="round"
-                className="transition-all duration-1000"
+                className="transition-all duration-700"
               />
               <defs>
                 <linearGradient id="auraStudioGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -208,40 +427,37 @@ export default function PomodoroView() {
               </defs>
             </svg>
 
-            {/* Inner Content */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 select-none">
-              <span className="text-xs font-bold uppercase tracking-widest text-purple-300 font-display">
-                {isRunning ? 'Đang Tập Trung Học' : 'Sẵn Sàng'}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-purple-300 font-display">
+                {isRunning ? (phase === 'focus' ? 'Đang Học' : 'Đang Nghỉ') : 'Sẵn Sàng'}
               </span>
 
-              <div className="text-6xl font-black font-display tracking-tight text-white shimmer-text my-2">
+              <div className="text-4xl sm:text-5xl font-black font-display tracking-tight text-white shimmer-text my-1.5">
                 {timeFormatted}
               </div>
 
-              <p className="text-xs text-slate-300 max-w-[220px] truncate">
-                {focusTasks[0].text}
-              </p>
-
-              <div className="mt-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-[10px] text-purple-200">
+              <div className="mt-1 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-[10px] text-purple-200">
                 <Sparkles className="w-3 h-3 text-amber-400" />
                 <span>Đã học {sessionsCompleted} phiên hôm nay</span>
               </div>
             </div>
           </div>
 
-          {/* Desktop Controls */}
-          <div className="flex items-center gap-5 mt-6 z-10">
+          {/* Controls */}
+          <div className="flex items-center gap-3 z-10">
             <button
+              type="button"
               onClick={handleReset}
-              className="w-12 h-12 rounded-2xl glass-button flex items-center justify-center text-slate-400 hover:text-white transition-all"
-              title="Đặt lại phiên"
+              className="w-10 h-10 rounded-xl glass-button flex items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer"
+              title="Đặt lại"
             >
-              <RotateCcw className="w-5 h-5" />
+              <RotateCcw className="w-4 h-4" />
             </button>
 
             <button
+              type="button"
               onClick={() => setIsRunning(!isRunning)}
-              className="px-10 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-sm shadow-xl shadow-purple-600/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5"
+              className="px-7 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-purple-600/35 hover:scale-[1.03] active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
             >
               {isRunning ? (
                 <>
@@ -251,67 +467,19 @@ export default function PomodoroView() {
               ) : (
                 <>
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Bắt Đầu Học</span>
+                  <span>Bắt Đầu</span>
                 </>
               )}
             </button>
 
             <button
-              onClick={() => {
-                setSecondsLeft(0);
-              }}
-              className="w-12 h-12 rounded-2xl glass-button flex items-center justify-center text-slate-400 hover:text-white transition-all"
+              type="button"
+              onClick={handleSkip}
+              className="w-10 h-10 rounded-xl glass-button flex items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer"
               title="Hoàn thành phiên"
             >
-              <SkipForward className="w-5 h-5" />
+              <SkipForward className="w-4 h-4" />
             </button>
-          </div>
-        </div>
-
-        {/* Right (1 col): Sound player */}
-        <div className="rounded-3xl glass-card p-6 border border-white/10 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Music className="w-4 h-4 text-purple-400" />
-              <h3 className="text-sm font-bold font-display text-white">Nhạc Nền Học Bài</h3>
-            </div>
-
-            <button
-              onClick={() => setIsSoundPlaying(!isSoundPlaying)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
-                isSoundPlaying
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : 'glass-button text-slate-400 hover:text-white'
-              }`}
-            >
-              {isSoundPlaying ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              <span>{isSoundPlaying ? 'Bật' : 'Tắt'}</span>
-            </button>
-          </div>
-
-          <div className="space-y-2.5">
-            {SOUND_TRACKS.map((t) => (
-              <div
-                key={t.id}
-                onClick={() => {
-                  setSelectedSound(t.id);
-                  setIsSoundPlaying(true);
-                }}
-                className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                  selectedSound === t.id
-                    ? 'border-purple-400/50 bg-purple-500/15 text-white shadow-md'
-                    : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">{t.icon}</span>
-                  <div>
-                    <div className="text-xs font-bold text-white">{t.name}</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{t.desc}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>
