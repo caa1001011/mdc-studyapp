@@ -153,6 +153,7 @@ export async function fetchSubjectLessons(subjectId = null) {
 export async function uploadSubjectLesson({
   subjectId,
   subjectName,
+  category = 'video',
   title,
   file,
   uploadedBy,
@@ -200,6 +201,7 @@ export async function uploadSubjectLesson({
     id: lessonId,
     subjectId,
     subjectName,
+    category: category || (detectFileType(file) === 'video' ? 'video' : 'exercise'),
     title: title?.trim() || file.name,
     fileName: file.name,
     fileType: detectFileType(file),

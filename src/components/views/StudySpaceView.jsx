@@ -17,7 +17,9 @@ import {
   Trash2,
   Play,
   ArrowLeft,
-  Check
+  Check,
+  Network,
+  ClipboardCheck
 } from 'lucide-react';
 import { STUDY_SUBJECTS } from '../../data/mockData';
 import { getSessionUser } from '../../services/authService';
@@ -37,6 +39,40 @@ const ICONS_MAP = {
   Languages: Languages,
   FlaskConical: FlaskConical,
 };
+
+const LESSON_SUBFEATURES = [
+  {
+    id: 'video',
+    label: 'Video bài giảng',
+    icon: Video,
+    accept: 'video/*',
+    placeholder: 'Tiêu đề video bài giảng...',
+    uploadLabel: 'Tải lên Video bài giảng',
+    emptyText: 'Chưa có video bài giảng nào',
+  },
+  {
+    id: 'mindmap',
+    label: 'Sơ đồ tư duy',
+    icon: Network,
+    accept: 'image/*,.pdf',
+    placeholder: 'Tiêu đề sơ đồ tư duy...',
+    uploadLabel: 'Tải lên Sơ đồ tư duy',
+    emptyText: 'Chưa có sơ đồ tư duy nào',
+  },
+  {
+    id: 'exercise',
+    label: 'Bài tập củng cố kiến thức',
+    icon: ClipboardCheck,
+    accept: '.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp',
+    placeholder: 'Tiêu đề bài tập củng cố...',
+    uploadLabel: 'Tải lên Bài tập củng cố kiến thức',
+    emptyText: 'Chưa có bài tập củng cố kiến thức nào',
+  },
+];
+
+function getLessonCategory(lesson) {
+  return lesson.category || (lesson.fileType === 'video' ? 'video' : 'exercise');
+}
 
 function formatDuration(seconds) {
   const total = Math.max(0, Math.floor(seconds || 0));
@@ -73,6 +109,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
 
   // Subject Modal & Lesson Viewer state
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const [activeCategory, setActiveCategory] = useState('video');
   const [activeLesson, setActiveLesson] = useState(null);
 
   // Admin Upload state
@@ -149,6 +186,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   // Mở modal của 1 môn học
   const handleOpenSubject = (subject) => {
     setSelectedSubject(subject);
+    setActiveCategory('video');
     setActiveLesson(null);
     setUploadTitle('');
     setUploadFile(null);
@@ -166,6 +204,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
       id: progressItem.lessonId,
       subjectId: progressItem.subjectId,
       subjectName: progressItem.subjectName,
+      category: 'video',
       title: progressItem.title,
       fileName: progressItem.fileName,
       fileType: 'video',
@@ -173,6 +212,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     };
 
     setSelectedSubject(subject);
+    setActiveCategory('video');
     hasSeekedRef.current = false;
     setActiveLesson(matchedLesson);
   };
@@ -190,6 +230,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
       const created = await uploadSubjectLesson({
         subjectId: selectedSubject.id,
         subjectName: selectedSubject.name,
+        category: activeCategory,
         title: uploadTitle,
         file: uploadFile,
         uploadedBy: username,
@@ -292,6 +333,13 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const subjectLessons = selectedSubject
     ? allLessons.filter((l) => l.subjectId === selectedSubject.id)
     : [];
+
+  const currentSubfeature =
+    LESSON_SUBFEATURES.find((item) => item.id === activeCategory) || LESSON_SUBFEATURES[0];
+
+  const currentTabLessons = subjectLessons.filter(
+    (l) => getLessonCategory(l) === activeCategory
+  );
 
   return (
     <div className="space-y-6 md:space-y-8 pb-10">
@@ -540,7 +588,62 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                 </div>
               ) : (
                 <>
-                  {/* ADMIN ONLY: Form Upload File / Video */}
+                  {/* 3 tính năng con của Bài học: Video bài giảng, Sơ đồ tư duy, Bài tập củng cố kiến thức */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {LESSON_SUBFEATURES.map((tab) => {
+                      const TabIcon = tab.icon;
+                      const tabCount = subjectLessons.filter(
+                        (l) => getLessonCategory(l) === tab.id
+                      ).length;
+                      const isActive = activeCategory === tab.id;
+
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveCategory(tab.id);
+                            setUploadTitle('');
+                            setUploadFile(null);
+                            setUploadError('');
+                            setUploadProgress(0);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = '';
+                            }
+                          }}
+                          className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                            isActive
+                              ? 'bg-purple-600/25 border-purple-400/60 text-white shadow-lg shadow-purple-500/15'
+                              : 'bg-white/[0.03] border-white/10 text-slate-300 hover:border-white/25 hover:bg-white/[0.06]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`p-2 rounded-xl shrink-0 ${
+                                isActive
+                                  ? 'bg-purple-500/30 text-purple-200'
+                                  : 'bg-white/[0.05] text-slate-400'
+                              }`}
+                            >
+                              <TabIcon className="w-4 h-4" />
+                            </div>
+                            <span className="text-xs font-bold truncate">{tab.label}</span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
+                              isActive
+                                ? 'bg-purple-500/40 text-purple-100'
+                                : 'bg-white/10 text-slate-400'
+                            }`}
+                          >
+                            {tabCount}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ADMIN ONLY: Form Upload theo từng tính năng con */}
                   {isAdmin && (
                     <form
                       onSubmit={handleUploadLesson}
@@ -548,7 +651,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     >
                       <div className="flex items-center gap-2 text-xs font-bold text-purple-300 uppercase tracking-wider">
                         <Upload className="w-4 h-4" />
-                        <span>Tải lên tài liệu / video bài giảng (Quản trị viên)</span>
+                        <span>{currentSubfeature.uploadLabel} (Quản trị viên)</span>
                       </div>
 
                       {uploadError && (
@@ -561,7 +664,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         <input
                           type="text"
                           required
-                          placeholder="Tiêu đề bài học..."
+                          placeholder={currentSubfeature.placeholder}
                           value={uploadTitle}
                           onChange={(e) => setUploadTitle(e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
@@ -571,7 +674,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                           ref={fileInputRef}
                           type="file"
                           required
-                          accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"
+                          accept={currentSubfeature.accept}
                           onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                           className="w-full px-3 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-600/30 file:text-purple-200 cursor-pointer"
                         />
@@ -606,7 +709,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                           ) : (
                             <>
                               <Upload className="w-3.5 h-3.5" />
-                              <span>Đăng Bài Học</span>
+                              <span>Đăng {currentSubfeature.label}</span>
                             </>
                           )}
                         </button>
@@ -614,19 +717,19 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     </form>
                   )}
 
-                  {/* Danh sách bài học trong môn */}
+                  {/* Danh sách nội dung trong tính năng con đang chọn */}
                   {isLoadingLessons ? (
                     <div className="py-12 text-center text-xs text-slate-400 space-y-2">
                       <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
                       <p>Đang tải nội dung môn học...</p>
                     </div>
-                  ) : subjectLessons.length === 0 ? (
+                  ) : currentTabLessons.length === 0 ? (
                     <div className="py-12 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
-                      Chưa có bài học nào trong môn {selectedSubject.name}.
+                      {currentSubfeature.emptyText} trong môn {selectedSubject.name}.
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      {subjectLessons.map((lesson) => {
+                      {currentTabLessons.map((lesson) => {
                         const LessonIcon = getLessonIcon(lesson.fileType);
                         const savedProg = lessonProgress[lesson.id];
 
