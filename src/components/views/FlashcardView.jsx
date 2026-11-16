@@ -14,7 +14,9 @@ import {
   Upload,
   Loader2,
   Save,
-  Image as ImageIcon
+  Image as ImageIcon,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
@@ -76,6 +78,17 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [modalError, setModalError] = useState('');
   const [isSavingDeck, setIsSavingDeck] = useState(false);
+  const [isDecksCollapsed, setIsDecksCollapsed] = useState(() => {
+    return localStorage.getItem('lumina_flashcard_decks_collapsed') === 'true';
+  });
+
+  const toggleDecksCollapsed = () => {
+    setIsDecksCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('lumina_flashcard_decks_collapsed', String(next));
+      return next;
+    });
+  };
 
   // Tải bộ thẻ Sách giáo khoa + Bộ thẻ cá nhân
   useEffect(() => {
@@ -386,137 +399,184 @@ export default function FlashcardView({ currentUser: propsUser }) {
         </div>
       </div>
 
-      {/* 2. Main 4-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left Column (1 col): Textbook Decks + Personal Decks */}
-        <div className="space-y-5">
-          {/* Sách Giáo Khoa (Admin cung cấp) */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between">
-              <span>Sách Giáo Khoa (Theo Unit)</span>
-              <span className="text-[10px] text-purple-300 font-mono">{textbookDecks.length}</span>
-            </h3>
+      {/* 2. Main Responsive Layout: Collapsible Deck List + Center Stage + Word List */}
+      <div className="flex flex-col lg:flex-row items-start gap-6">
+        {/* Left Column: Textbook Decks + Personal Decks (Collapsible & Scrollable) */}
+        <div
+          className={`w-full shrink-0 transition-all duration-300 ${
+            isDecksCollapsed ? 'lg:w-12' : 'lg:w-72'
+          }`}
+        >
+          {isDecksCollapsed ? (
+            <div className="flex lg:flex-col items-center justify-between lg:justify-start gap-2 p-2 rounded-2xl glass-card border border-white/10">
+              <button
+                type="button"
+                onClick={toggleDecksCollapsed}
+                className="p-2 rounded-xl bg-white/[0.05] hover:bg-purple-600/30 border border-white/10 text-purple-300 hover:text-white transition-all cursor-pointer"
+                title="Mở rộng danh sách bộ thẻ"
+              >
+                <PanelLeftOpen className="w-4 h-4" />
+              </button>
+              <span className="lg:hidden text-xs font-semibold text-slate-300 truncate">
+                Danh sách bộ thẻ ({textbookDecks.length + personalDecks.length})
+              </span>
+              <span
+                className="hidden lg:block text-[10px] font-bold text-purple-300 font-mono py-1"
+                title={`${textbookDecks.length + personalDecks.length} bộ thẻ`}
+              >
+                {textbookDecks.length + personalDecks.length}
+              </span>
+            </div>
+          ) : (
+            <div className="rounded-2xl glass-card border border-white/10 p-3 space-y-3">
+              {/* Header + Nút thu gọn */}
+              <div className="flex items-center justify-between px-1 pb-2 border-b border-white/10">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 font-display">
+                  Danh sách bộ thẻ
+                </span>
+                <button
+                  type="button"
+                  onClick={toggleDecksCollapsed}
+                  className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title="Thu gọn danh sách bộ thẻ"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              </div>
 
-            {isLoading ? (
-              <div className="p-4 rounded-2xl glass-card border border-white/10 text-center text-xs text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-purple-400" />
-                Đang tải...
-              </div>
-            ) : textbookDecks.length === 0 ? (
-              <div className="p-4 rounded-2xl glass-card border border-dashed border-white/10 text-xs text-slate-400 text-center">
-                Chưa có bộ thẻ sách giáo khoa nào.
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {textbookDecks.map((deck) => {
-                  const isSelected = selectedDeckId === deck.id;
-                  return (
-                    <div
-                      key={deck.id}
-                      onClick={() => handleSelectDeck(deck.id)}
-                      className={`p-4 rounded-2xl glass-card border cursor-pointer transition-all group ${
-                        isSelected
-                          ? 'border-purple-400/60 bg-purple-500/15 shadow-lg shadow-purple-500/20 translate-x-1'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        {deck.coverImage ? (
-                          <img
-                            src={deck.coverImage}
-                            alt={deck.bookName || deck.title}
-                            className="w-11 h-14 rounded-lg object-cover border border-white/15 shrink-0 bg-white/5"
-                          />
-                        ) : (
-                          <div className="w-11 h-14 rounded-lg border border-white/10 bg-amber-500/10 flex items-center justify-center shrink-0">
-                            <BookOpen className="w-5 h-5 text-amber-300/70" />
+              {/* Vùng cuộn riêng cho danh sách bộ thẻ */}
+              <div className="max-h-[calc(100vh-270px)] min-h-[200px] overflow-y-auto pr-1 space-y-4">
+                {/* Sách Giáo Khoa (Admin cung cấp) */}
+                <div className="space-y-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between">
+                    <span>Sách Giáo Khoa (Theo Unit)</span>
+                    <span className="text-[10px] text-purple-300 font-mono">{textbookDecks.length}</span>
+                  </h3>
+
+                  {isLoading ? (
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-center text-xs text-slate-400">
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-purple-400" />
+                      Đang tải...
+                    </div>
+                  ) : textbookDecks.length === 0 ? (
+                    <div className="p-3 rounded-xl border border-dashed border-white/10 text-xs text-slate-400 text-center">
+                      Chưa có bộ thẻ sách giáo khoa nào.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {textbookDecks.map((deck) => {
+                        const isSelected = selectedDeckId === deck.id;
+                        return (
+                          <div
+                            key={deck.id}
+                            onClick={() => handleSelectDeck(deck.id)}
+                            className={`p-2.5 rounded-xl border cursor-pointer transition-all group ${
+                              isSelected
+                                ? 'border-purple-400/60 bg-purple-500/15 shadow-md shadow-purple-500/15'
+                                : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              {deck.coverImage ? (
+                                <img
+                                  src={deck.coverImage}
+                                  alt={deck.bookName || deck.title}
+                                  className="w-9 h-11 rounded-lg object-cover border border-white/15 shrink-0 bg-white/5"
+                                />
+                              ) : (
+                                <div className="w-9 h-11 rounded-lg border border-white/10 bg-amber-500/10 flex items-center justify-center shrink-0">
+                                  <BookOpen className="w-4 h-4 text-amber-300/75" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 truncate">
+                                    {[deck.bookName || deck.unit || 'Sách Giáo Khoa', deck.grade].filter(Boolean).join(' • ')}
+                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span className="text-[10px] text-slate-400">
+                                      {deck.cards?.length || 0} từ
+                                    </span>
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteDeck(deck, e)}
+                                        className="p-0.5 rounded-md text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                        title="Xóa bộ thẻ SGK"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                <h4 className="text-xs font-bold text-white mt-0.5 line-clamp-1 font-display">
+                                  {deck.title}
+                                </h4>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 truncate">
-                              {[deck.bookName || deck.unit || 'Sách Giáo Khoa', deck.grade].filter(Boolean).join(' • ')}
-                            </span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[11px] text-slate-400">
-                                {deck.cards?.length || 0} từ
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bộ Thẻ Cá Nhân (Người học tự tạo) */}
+                {personalDecks.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-white/10">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between">
+                      <span>Bộ Thẻ Tự Tạo</span>
+                      <span className="text-[10px] text-cyan-300 font-mono">{personalDecks.length}</span>
+                    </h3>
+
+                    <div className="space-y-1.5">
+                      {personalDecks.map((deck) => {
+                        const isSelected = selectedDeckId === deck.id;
+                        return (
+                          <div
+                            key={deck.id}
+                            onClick={() => handleSelectDeck(deck.id)}
+                            className={`p-2.5 rounded-xl border cursor-pointer transition-all group ${
+                              isSelected
+                                ? 'border-purple-400/60 bg-purple-500/15 shadow-md shadow-purple-500/15'
+                                : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">
+                                {deck.creationMethod === 'ai' ? 'Tạo bởi AI' : 'Tự nhập'}
                               </span>
-                              {isAdmin && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-400">
+                                  {deck.cards?.length || 0} từ
+                                </span>
                                 <button
                                   type="button"
                                   onClick={(e) => handleDeleteDeck(deck, e)}
-                                  className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Xóa bộ thẻ SGK"
+                                  className="p-0.5 rounded-md text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  title="Xóa bộ thẻ cá nhân"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
-                              )}
+                              </div>
                             </div>
+                            <h4 className="text-xs font-bold text-white mt-0.5 line-clamp-1 font-display">
+                              {deck.title}
+                            </h4>
                           </div>
-                          <h4 className="text-sm font-bold text-white mt-1 line-clamp-2 font-display">
-                            {deck.title}
-                          </h4>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Bộ Thẻ Cá Nhân (Người học tự tạo) */}
-          {personalDecks.length > 0 && (
-            <div className="space-y-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between">
-                <span>Bộ Thẻ Tự Tạo</span>
-                <span className="text-[10px] text-cyan-300 font-mono">{personalDecks.length}</span>
-              </h3>
-
-              <div className="space-y-2.5">
-                {personalDecks.map((deck) => {
-                  const isSelected = selectedDeckId === deck.id;
-                  return (
-                    <div
-                      key={deck.id}
-                      onClick={() => handleSelectDeck(deck.id)}
-                      className={`p-4 rounded-2xl glass-card border cursor-pointer transition-all group ${
-                        isSelected
-                          ? 'border-purple-400/60 bg-purple-500/15 shadow-lg shadow-purple-500/20 translate-x-1'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">
-                          {deck.creationMethod === 'ai' ? 'Tạo bởi AI' : 'Tự nhập'}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-slate-400">
-                            {deck.cards?.length || 0} từ
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteDeck(deck, e)}
-                            className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Xóa bộ thẻ cá nhân"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <h4 className="text-sm font-bold text-white mt-1.5 line-clamp-2 font-display">
-                        {deck.title}
-                      </h4>
-                    </div>
-                  );
-                })}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Center Stage (2 cols): 3D Flashcard */}
-        <div className="lg:col-span-2 space-y-5">
+        {/* Center Stage: 3D Flashcard (tự căn giữa & mở rộng đẹp khi thu gọn danh sách bộ thẻ) */}
+        <div className="flex-1 min-w-0 w-full">
+          <div className="max-w-2xl mx-auto space-y-5">
           {!currentDeck || currentCards.length === 0 ? (
             <div className="rounded-3xl glass-card p-10 text-center border border-white/10 space-y-4">
               <Layers className="w-12 h-12 text-purple-400 mx-auto opacity-70" />
@@ -706,10 +766,11 @@ export default function FlashcardView({ currentUser: propsUser }) {
               </button>
             </div>
           )}
+          </div>
         </div>
 
-        {/* Right Column (1 col): Card List */}
-        <div className="space-y-3">
+        {/* Right Column: Card List */}
+        <div className="w-full lg:w-64 shrink-0 space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 font-display">
             Danh Sách Từ Trong Bộ
           </h3>
