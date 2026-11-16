@@ -521,7 +521,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     required
                     accept={currentSubfeature.accept}
                     onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full px-3 py-1.5 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-600/30 file:text-purple-200 cursor-pointer"
+                    className="w-full px-3 py-1.5 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-100 file:text-indigo-800 dark:file:bg-purple-600/30 dark:file:text-purple-200 cursor-pointer"
                   />
                 </div>
 
@@ -764,7 +764,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                   setHasUnsavedNotes(true);
                 }}
                 placeholder="Ghi chú công thức cần nhớ, bài tập giáo viên dặn..."
-                className="w-full bg-transparent resize-none text-xs sm:text-sm text-slate-200 leading-relaxed placeholder-slate-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-transparent border border-slate-200 dark:border-transparent resize-none text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
               />
 
               <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2">

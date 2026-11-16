@@ -701,17 +701,17 @@ export default function FlashcardView({ currentUser: propsUser }) {
               <div className="flex items-center justify-center gap-4 pt-2">
                 <button
                   onClick={() => handleNext(false)}
-                  className="flex-1 max-w-[220px] py-3.5 px-6 rounded-2xl glass-card border-rose-500/30 hover:border-rose-500/60 bg-rose-500/10 text-rose-200 hover:text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
+                  className="flex-1 max-w-[220px] py-3.5 px-6 rounded-2xl glass-card border-rose-500/30 hover:border-rose-500/60 bg-rose-500/10 text-rose-700 dark:text-rose-200 hover:text-rose-900 dark:hover:text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
                 >
-                  <X className="w-4 h-4 text-rose-400" />
+                  <X className="w-4 h-4 text-rose-500 dark:text-rose-400" />
                   <span>Cần Ôn Lại [←]</span>
                 </button>
 
                 <button
                   onClick={() => handleNext(true)}
-                  className="flex-1 max-w-[220px] py-3.5 px-6 rounded-2xl glass-card border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-500/10 text-emerald-200 hover:text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
+                  className="flex-1 max-w-[220px] py-3.5 px-6 rounded-2xl glass-card border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200 hover:text-emerald-900 dark:hover:text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
                 >
-                  <Check className="w-4 h-4 text-emerald-400" />
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Đã Thuộc [→]</span>
                 </button>
               </div>
@@ -812,8 +812,8 @@ export default function FlashcardView({ currentUser: propsUser }) {
 
       {/* 3. MODAL TẠO BỘ THẺ (NHẬP THỦ CÔNG HOẶC AI TẠO TỪ TÀI LIỆU) */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl glass-card border border-white/20 shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl bg-white dark:bg-[#111322] border border-slate-200 dark:border-white/20 shadow-2xl overflow-hidden">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
               <div>

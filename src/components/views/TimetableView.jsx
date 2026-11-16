@@ -25,12 +25,12 @@ const DAYS_OF_WEEK = [
 
 // Color Palettes for Subjects
 const COLOR_THEMES = [
-  { id: 'purple', name: 'Màu Tím', bg: 'bg-purple-500/20', border: 'border-purple-500/40', text: 'text-purple-200', glow: 'shadow-purple-500/20' },
-  { id: 'cyan', name: 'Xanh Lam', bg: 'bg-cyan-500/20', border: 'border-cyan-500/40', text: 'text-cyan-200', glow: 'shadow-cyan-500/20' },
-  { id: 'emerald', name: 'Xanh Lá', bg: 'bg-emerald-500/20', border: 'border-emerald-500/40', text: 'text-emerald-200', glow: 'shadow-emerald-500/20' },
-  { id: 'amber', name: 'Màu Vàng', bg: 'bg-amber-500/20', border: 'border-amber-500/40', text: 'text-amber-200', glow: 'shadow-amber-500/20' },
-  { id: 'rose', name: 'Màu Hồng', bg: 'bg-rose-500/20', border: 'border-rose-500/40', text: 'text-rose-200', glow: 'shadow-rose-500/20' },
-  { id: 'blue', name: 'Xanh Dương', bg: 'bg-blue-500/20', border: 'border-blue-500/40', text: 'text-blue-200', glow: 'shadow-blue-500/20' },
+  { id: 'purple', name: 'Màu Tím', bg: 'bg-indigo-50 dark:bg-purple-500/20', border: 'border-indigo-200 dark:border-purple-500/40', text: 'text-indigo-900 dark:text-purple-200', glow: 'shadow-indigo-500/10 dark:shadow-purple-500/20' },
+  { id: 'cyan', name: 'Xanh Lam', bg: 'bg-sky-50 dark:bg-cyan-500/20', border: 'border-sky-200 dark:border-cyan-500/40', text: 'text-sky-900 dark:text-cyan-200', glow: 'shadow-sky-500/10 dark:shadow-cyan-500/20' },
+  { id: 'emerald', name: 'Xanh Lá', bg: 'bg-emerald-50 dark:bg-emerald-500/20', border: 'border-emerald-200 dark:border-emerald-500/40', text: 'text-emerald-900 dark:text-emerald-200', glow: 'shadow-emerald-500/10 dark:shadow-emerald-500/20' },
+  { id: 'amber', name: 'Màu Vàng', bg: 'bg-amber-50 dark:bg-amber-500/20', border: 'border-amber-200 dark:border-amber-500/40', text: 'text-amber-900 dark:text-amber-200', glow: 'shadow-amber-500/10 dark:shadow-amber-500/20' },
+  { id: 'rose', name: 'Màu Hồng', bg: 'bg-rose-50 dark:bg-rose-500/20', border: 'border-rose-200 dark:border-rose-500/40', text: 'text-rose-900 dark:text-rose-200', glow: 'shadow-rose-500/10 dark:shadow-rose-500/20' },
+  { id: 'blue', name: 'Xanh Dương', bg: 'bg-blue-50 dark:bg-blue-500/20', border: 'border-blue-200 dark:border-blue-500/40', text: 'text-blue-900 dark:text-blue-200', glow: 'shadow-blue-500/10 dark:shadow-blue-500/20' },
 ];
 
 // Default Time Slots (Mặc định trống cho tài khoản mới để người dùng tự thiết kế)
@@ -411,7 +411,7 @@ export default function TimetableView({ currentUser: propsUser }) {
             <thead>
               <tr className="border-b border-white/15 bg-white/[0.04]">
                 {/* Column 0: Time Frame header - Gọn chiều ngang & chuẩn UI */}
-                <th className="py-2.5 px-2 w-[105px] whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-300 sticky left-0 z-20 bg-[#0e101c]/95 backdrop-blur-md border-r border-white/10 text-center">
+                <th className="py-2.5 px-2 w-[105px] whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 sticky left-0 z-20 bg-slate-50/95 dark:bg-[#0e101c]/95 backdrop-blur-md border-r border-slate-200 dark:border-white/10 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span>Khung Giờ</span>
@@ -431,7 +431,7 @@ export default function TimetableView({ currentUser: propsUser }) {
             </thead>
 
             {/* Table Body: Time Slot Rows */}
-            <tbody className="divide-y divide-white/10">
+            <tbody className="divide-y divide-slate-200 dark:divide-white/10">
               {timeSlots.map((slot) => {
                 return (
                   <tr
@@ -439,7 +439,7 @@ export default function TimetableView({ currentUser: propsUser }) {
                     className="group/row hover:bg-white/[0.02] transition-colors"
                   >
                     {/* Sticky Left Column: Time Slot Info & Edit Controls - Gọn gàng */}
-                    <td className="py-1.5 px-2 w-[105px] whitespace-nowrap sticky left-0 z-10 bg-[#0c0d18]/95 backdrop-blur-md border-r border-white/10">
+                    <td className="py-1.5 px-2 w-[105px] whitespace-nowrap sticky left-0 z-10 bg-white/95 dark:bg-[#0c0d18]/95 backdrop-blur-md border-r border-slate-200 dark:border-white/10">
                       <div className="flex items-center justify-between gap-1">
                         <div className="min-w-0">
                           <span className="font-display font-bold text-xs text-white block truncate leading-tight">
@@ -493,7 +493,7 @@ export default function TimetableView({ currentUser: propsUser }) {
                                 {entry.subject}
                               </span>
                               {entry.notes && (
-                                <span className="text-[9.5px] font-medium text-slate-200/90 truncate max-w-full block leading-none mt-0.5 px-1.5 py-0.5 rounded bg-black/20 dark:bg-white/10">
+                                <span className="text-[9.5px] font-medium text-slate-600 dark:text-slate-200/90 truncate max-w-full block leading-none mt-0.5 px-1.5 py-0.5 rounded bg-white/80 dark:bg-white/10">
                                   {entry.notes}
                                 </span>
                               )}
@@ -531,8 +531,8 @@ export default function TimetableView({ currentUser: propsUser }) {
 
       {/* 3. MODAL: ADD / EDIT TIME SLOT (Khung Thời Gian) */}
       {isSlotModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl glass-card p-6 border border-white/20 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#111322] p-6 border border-slate-200 dark:border-white/20 shadow-2xl relative">
             <button
               onClick={() => setIsSlotModalOpen(false)}
               className="absolute top-5 right-5 p-1 rounded-xl text-slate-400 hover:text-white glass-button"
@@ -630,8 +630,8 @@ export default function TimetableView({ currentUser: propsUser }) {
 
       {/* 4. MODAL: EDIT / ADD CLASS CELL (Xếp Môn Học Vào Ô) */}
       {isCellModalOpen && selectedCell && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl glass-card p-6 border border-white/20 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#111322] p-6 border border-slate-200 dark:border-white/20 shadow-2xl relative">
             <button
               onClick={() => setIsCellModalOpen(false)}
               className="absolute top-5 right-5 p-1 rounded-xl text-slate-400 hover:text-white glass-button"
@@ -682,11 +682,11 @@ export default function TimetableView({ currentUser: propsUser }) {
                       type="button"
                       onClick={() => setCellColor(theme.id)}
                       className={`h-9 rounded-xl border flex items-center justify-center transition-all ${theme.bg} ${theme.border} ${
-                        cellColor === theme.id ? 'ring-2 ring-white scale-105 shadow-lg' : 'opacity-70 hover:opacity-100'
+                        cellColor === theme.id ? 'ring-2 ring-indigo-500 dark:ring-white scale-105 shadow-lg' : 'opacity-80 hover:opacity-100'
                       }`}
                       title={theme.name}
                     >
-                      {cellColor === theme.id && <Check className="w-4 h-4 text-white" />}
+                      {cellColor === theme.id && <Check className="w-4 h-4 text-indigo-700 dark:text-white" />}
                     </button>
                   ))}
                 </div>

@@ -29,8 +29,8 @@ export default function BottomNav({ activeTab, setActiveTab }) {
               onClick={() => setActiveTab(item.id)}
               className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all duration-200 ${
                 isActive
-                  ? 'text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'text-indigo-700 dark:text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               {/* Active Ambient Glow Background */}

@@ -159,7 +159,7 @@ export default function GamificationView() {
                       {card.text}
                     </span>
                   ) : (
-                    <Sparkles className="w-6 h-6 text-purple-400/40" />
+                    <Sparkles className="w-6 h-6 text-indigo-400/60 dark:text-purple-400/40" />
                   )}
                 </div>
               );

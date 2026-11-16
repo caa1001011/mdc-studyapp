@@ -496,8 +496,8 @@ export default function UserManagementView({ currentUser, onUserUpdated }) {
 
       {/* 3. Modal Chỉnh sửa tài khoản */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl glass-card p-6 border border-white/20 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#111322] p-6 border border-slate-200 dark:border-white/20 shadow-2xl relative">
             <button
               onClick={() => setEditingUser(null)}
               className="absolute top-5 right-5 p-1 rounded-xl text-slate-400 hover:text-white glass-button"

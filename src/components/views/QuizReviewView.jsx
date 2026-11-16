@@ -392,7 +392,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
                         isCurrent
                           ? 'bg-purple-600 text-white shadow-md shadow-purple-500/30 border border-purple-400'
                           : isAnswered
-                          ? 'bg-white/20 text-slate-200 border border-white/20'
+                          ? 'bg-indigo-100 text-indigo-900 border border-indigo-200 dark:bg-white/20 dark:text-slate-200 dark:border-white/20'
                           : 'bg-white/[0.04] text-slate-500 border border-white/10 hover:text-slate-300'
                       }`}
                     >
@@ -429,7 +429,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
                       <span className="text-xs sm:text-sm font-medium">{opt}</span>
                       <div
                         className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
-                          isSelected ? 'border-purple-400 bg-purple-500' : 'border-white/20'
+                          isSelected ? 'border-indigo-600 bg-indigo-600 dark:border-purple-400 dark:bg-purple-500' : 'border-slate-300 dark:border-white/20'
                         }`}
                       >
                         {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
@@ -475,7 +475,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
           <div className="max-w-3xl mx-auto space-y-6">
             <div className="rounded-3xl glass-card p-8 text-center border border-purple-500/30 shadow-2xl">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-500 via-pink-500 to-amber-400 p-[1.5px] mx-auto mb-4 shadow-xl shadow-purple-500/30">
-                <div className="w-full h-full bg-[#0d0e17] rounded-[15px] flex items-center justify-center">
+                <div className="w-full h-full bg-white dark:bg-[#0d0e17] rounded-[15px] flex items-center justify-center">
                   <Award className="w-8 h-8 text-amber-400" />
                 </div>
               </div>
@@ -771,8 +771,8 @@ export default function QuizReviewView({ currentUser: propsUser }) {
 
       {/* MODAL ADMIN TẠO / UP ĐỀ THI */}
       {isCreateModalOpen && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl bg-[#111322] border border-white/15 shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/75 backdrop-blur-sm">
+          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl bg-white dark:bg-[#111322] border border-slate-200 dark:border-white/15 shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300">

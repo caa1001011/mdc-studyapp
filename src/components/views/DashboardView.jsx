@@ -33,23 +33,23 @@ import {
 const NOTE_COLORS = {
   purple: {
     label: 'Tím',
-    card: 'border-purple-400/25 bg-purple-500/[0.06]',
-    dot: 'bg-purple-400'
+    card: 'border-indigo-200 bg-indigo-50/80 dark:border-purple-400/25 dark:bg-purple-500/[0.06]',
+    dot: 'bg-indigo-500 dark:bg-purple-400'
   },
   cyan: {
     label: 'Xanh ngọc',
-    card: 'border-cyan-400/25 bg-cyan-500/[0.06]',
-    dot: 'bg-cyan-400'
+    card: 'border-sky-200 bg-sky-50/80 dark:border-cyan-400/25 dark:bg-cyan-500/[0.06]',
+    dot: 'bg-sky-500 dark:bg-cyan-400'
   },
   amber: {
     label: 'Vàng',
-    card: 'border-amber-400/25 bg-amber-500/[0.06]',
-    dot: 'bg-amber-400'
+    card: 'border-amber-200 bg-amber-50/80 dark:border-amber-400/25 dark:bg-amber-500/[0.06]',
+    dot: 'bg-amber-500 dark:bg-amber-400'
   },
   emerald: {
     label: 'Xanh lá',
-    card: 'border-emerald-400/25 bg-emerald-500/[0.06]',
-    dot: 'bg-emerald-400'
+    card: 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-400/25 dark:bg-emerald-500/[0.06]',
+    dot: 'bg-emerald-500 dark:bg-emerald-400'
   }
 };
 
@@ -753,8 +753,8 @@ export default function DashboardView({ currentUser }) {
                       <span
                         className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
                           goal.completed
-                            ? 'bg-emerald-500/80 border-emerald-400 text-white'
-                            : 'border-slate-500 hover:border-purple-400 bg-transparent'
+                            ? 'bg-emerald-600 dark:bg-emerald-500/80 border-emerald-600 dark:border-emerald-400 text-white'
+                            : 'border-slate-400 dark:border-slate-500 hover:border-purple-400 bg-transparent'
                         }`}
                       >
                         {goal.completed && <Check className="w-3 h-3 stroke-[3]" />}
@@ -786,8 +786,8 @@ export default function DashboardView({ currentUser }) {
 
       {/* Modal thêm sự kiện */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md p-5 rounded-3xl glass-card border border-white/20 bg-[#0e101c] shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md p-5 rounded-3xl bg-white dark:bg-[#0e101c] border border-slate-200 dark:border-white/20 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white font-display">Thêm sự kiện mới</h3>
               <button
@@ -876,8 +876,8 @@ export default function DashboardView({ currentUser }) {
 
       {/* Modal thêm / sửa ghi chú cá nhân */}
       {showNoteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md p-5 rounded-3xl glass-card border border-white/20 bg-[#0e101c] shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md p-5 rounded-3xl bg-white dark:bg-[#0e101c] border border-slate-200 dark:border-white/20 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white font-display">
                 {editingNoteId ? 'Chỉnh sửa ghi chú' : 'Thêm ghi chú cá nhân'}
@@ -931,8 +931,8 @@ export default function DashboardView({ currentUser }) {
                       onClick={() => setNoteColor(key)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
                         noteColor === key
-                          ? `${cfg.card} text-white border-white/40`
-                          : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                          ? `${cfg.card} text-slate-900 dark:text-white border-indigo-400 dark:border-white/40 ring-1 ring-indigo-400/40`
+                          : 'bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
