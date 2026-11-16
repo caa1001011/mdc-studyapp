@@ -9,9 +9,10 @@ import {
   Clock,
   Trash2,
   X,
-  CalendarDays,
   StickyNote,
-  Pencil
+  Pencil,
+  ListChecks,
+  Check
 } from 'lucide-react';
 import {
   fetchUserCalendarEvents,
@@ -23,6 +24,11 @@ import {
   loadLocalPersonalNotes,
   saveUserPersonalNotes
 } from '../../services/personalNoteService';
+import {
+  fetchUserDailyGoals,
+  loadLocalDailyGoals,
+  saveUserDailyGoals
+} from '../../services/dailyGoalService';
 
 const NOTE_COLORS = {
   purple: {
@@ -59,12 +65,6 @@ const parseDateKey = (key) => {
   return new Date(y, m - 1, d);
 };
 
-const diffDaysFromToday = (targetKey, nowDate) => {
-  const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
-  const target = parseDateKey(targetKey);
-  return Math.round((target - todayStart) / (1000 * 60 * 60 * 24));
-};
-
 export default function DashboardView({ currentUser }) {
   const username = currentUser?.username || '';
 
@@ -93,6 +93,10 @@ export default function DashboardView({ currentUser }) {
   const [noteContent, setNoteContent] = useState('');
   const [noteColor, setNoteColor] = useState('purple');
 
+  // Danh sách mục tiêu hôm nay theo tài khoản (cache LocalStorage + đồng bộ Firebase)
+  const [goals, setGoals] = useState(() => loadLocalDailyGoals(username));
+  const [newGoalText, setNewGoalText] = useState('');
+
   // Modal thêm sự kiện
   const [showAddModal, setShowAddModal] = useState(false);
   const [eventTitle, setEventTitle] = useState('');
@@ -102,7 +106,7 @@ export default function DashboardView({ currentUser }) {
 
   const pickerRef = useRef(null);
 
-  // Tải sự kiện và ghi chú cá nhân từ Firebase theo tài khoản người dùng
+  // Tải sự kiện, ghi chú cá nhân và mục tiêu hôm nay từ Firebase theo tài khoản người dùng
   useEffect(() => {
     let active = true;
     fetchUserCalendarEvents(username).then((loaded) => {
@@ -113,6 +117,11 @@ export default function DashboardView({ currentUser }) {
     fetchUserPersonalNotes(username).then((loadedNotes) => {
       if (active && Array.isArray(loadedNotes)) {
         setNotes(loadedNotes);
+      }
+    });
+    fetchUserDailyGoals(username).then((loadedGoals) => {
+      if (active && Array.isArray(loadedGoals)) {
+        setGoals(loadedGoals);
       }
     });
     return () => {
@@ -229,17 +238,6 @@ export default function DashboardView({ currentUser }) {
     return (eventsByDate[selectedDateKey] || []).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   }, [eventsByDate, selectedDateKey]);
 
-  // Tất cả sự kiện sắp tới (từ hôm nay trở đi)
-  const upcomingEvents = useMemo(() => {
-    return events
-      .map((ev) => ({
-        ...ev,
-        daysUntil: diffDaysFromToday(ev.date, now)
-      }))
-      .filter((ev) => ev.daysUntil >= 0)
-      .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
-  }, [events, now]);
-
   const openAddEventModal = (dateKey = selectedDateKey) => {
     setEventTitle('');
     setEventDate(dateKey);
@@ -278,6 +276,41 @@ export default function DashboardView({ currentUser }) {
     const nextEvents = events.filter((ev) => ev.id !== id);
     setEvents(nextEvents);
     await saveUserCalendarEvents(username, nextEvents);
+  };
+
+  const handleAddGoal = async (e) => {
+    e.preventDefault();
+    const trimmed = newGoalText.trim();
+    if (!trimmed) return;
+
+    const newGoal = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      text: trimmed,
+      completed: false,
+      createdAt: new Date().toISOString()
+    };
+
+    const nextGoals = [...goals, newGoal];
+    setGoals(nextGoals);
+    setNewGoalText('');
+    await saveUserDailyGoals(username, nextGoals);
+  };
+
+  const handleToggleGoal = async (id) => {
+    const nextGoals = goals.map((g) => (g.id === id ? { ...g, completed: !g.completed } : g));
+    setGoals(nextGoals);
+    await saveUserDailyGoals(username, nextGoals);
+  };
+
+  const handleDeleteGoal = async (id) => {
+    const nextGoals = goals.filter((g) => g.id !== id);
+    setGoals(nextGoals);
+    await saveUserDailyGoals(username, nextGoals);
+  };
+
+  const handleClearAllGoals = async () => {
+    setGoals([]);
+    await saveUserDailyGoals(username, []);
   };
 
   const openAddNoteModal = () => {
@@ -598,34 +631,41 @@ export default function DashboardView({ currentUser }) {
           )}
         </div>
 
-        {/* Cột phải: Khu vực Sự kiện gọn gàng */}
-        <div className="w-full lg:w-80 shrink-0 p-3 rounded-2xl glass-card border border-white/10 space-y-2.5">
-          {/* Chỉ hiển thị sự kiện ngày đang chọn khi ngày đó có sự kiện */}
+        {/* Cột phải: Thông báo sự kiện (chỉ hiện khi đến ngày có sự kiện) & Mục tiêu hôm nay */}
+        <div className="w-full lg:w-80 shrink-0 space-y-4">
           {selectedDayEvents.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="p-3 rounded-2xl glass-card border border-purple-400/25 space-y-2">
               <div className="flex items-center justify-between px-0.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">
-                  Ngày {formatDateDisplay(selectedDateKey)}
-                </span>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300">
+                <div className="flex items-center gap-1.5">
+                  <CalendarIcon className="w-3.5 h-3.5 text-purple-300" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">
+                    Sự kiện • {formatDateDisplay(selectedDateKey)}
+                  </span>
+                </div>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-200">
                   {selectedDayEvents.length}
                 </span>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {selectedDayEvents.map((ev) => (
                   <div
                     key={ev.id}
-                    className="group px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 flex items-center justify-between gap-2 transition-colors"
+                    className="group px-2.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 flex items-center justify-between gap-2 transition-colors"
                   >
-                    <div className="min-w-0 flex items-center gap-2 flex-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
-                      <span className="text-xs font-semibold text-white truncate">{ev.title}</span>
-                      {ev.time && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-cyan-300 shrink-0">
-                          <Clock className="w-2.5 h-2.5" />
-                          {ev.time}
-                        </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                        <span className="text-xs font-semibold text-white truncate">{ev.title}</span>
+                        {ev.time && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-cyan-300 shrink-0">
+                            <Clock className="w-2.5 h-2.5" />
+                            {ev.time}
+                          </span>
+                        )}
+                      </div>
+                      {ev.note && (
+                        <p className="text-[11px] text-slate-400 truncate pl-3.5 mt-0.5">{ev.note}</p>
                       )}
                     </div>
                     <button
@@ -634,7 +674,7 @@ export default function DashboardView({ currentUser }) {
                       className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
                       title="Xóa sự kiện"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
@@ -642,62 +682,100 @@ export default function DashboardView({ currentUser }) {
             </div>
           )}
 
-          {/* Sự kiện sắp tới */}
-          <div className={selectedDayEvents.length > 0 ? 'pt-2 border-t border-white/10 space-y-1.5' : 'space-y-1.5'}>
-            <div className="flex items-center justify-between px-0.5">
-              <div className="flex items-center gap-1.5">
-                <CalendarDays className="w-3.5 h-3.5 text-cyan-300" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                  Sự kiện sắp tới
-                </span>
+          {/* Checklist Mục tiêu hôm nay */}
+          <div className="p-3.5 rounded-2xl glass-card border border-white/10 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-xl bg-cyan-500/15 border border-cyan-400/25 flex items-center justify-center text-cyan-300 shrink-0">
+                  <ListChecks className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 truncate">
+                      Mục tiêu hôm nay
+                    </h3>
+                    {goals.length > 0 && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 text-slate-300">
+                        {goals.filter((g) => g.completed).length}/{goals.length}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              {upcomingEvents.length > 0 && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 text-slate-300">
-                  {upcomingEvents.length}
-                </span>
+
+              {goals.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllGoals}
+                  className="text-[11px] font-semibold text-rose-400/90 hover:text-rose-300 px-2 py-1 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+                  title="Xóa tất cả mục tiêu"
+                >
+                  Xóa tất cả
+                </button>
               )}
             </div>
 
-            {upcomingEvents.length === 0 ? (
-              <p className="text-[11px] text-slate-400 px-0.5">
-                Chưa có sự kiện nào sắp tới.
+            <form onSubmit={handleAddGoal} className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={newGoalText}
+                onChange={(e) => setNewGoalText(e.target.value)}
+                placeholder="Nhập mục tiêu hôm nay..."
+                className="flex-1 min-w-0 px-3 py-1.5 rounded-xl bg-white/[0.06] border border-white/15 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+              <button
+                type="submit"
+                className="p-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-sm shadow-purple-500/20 transition-all cursor-pointer shrink-0"
+                title="Thêm mục tiêu"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </form>
+
+            {goals.length === 0 ? (
+              <p className="text-[11px] text-slate-400 text-center py-3 border border-dashed border-white/10 rounded-xl">
+                Chưa có mục tiêu nào hôm nay.
               </p>
             ) : (
-              <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
-                {upcomingEvents.map((ev) => (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+                {goals.map((goal) => (
                   <div
-                    key={`up-${ev.id}`}
-                    onClick={() => {
-                      const d = parseDateKey(ev.date);
-                      setSelectedDate(d);
-                      setCurrentMonth(d.getMonth());
-                      setCurrentYear(d.getFullYear());
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                    key={goal.id}
+                    className={`group px-2.5 py-2 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.06] flex items-center justify-between gap-2 transition-all ${
+                      goal.completed ? 'opacity-50' : ''
+                    }`}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold text-white truncate">{ev.title}</div>
-                      <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <span>{formatDateDisplay(ev.date)}</span>
-                        {ev.time && <span>• {ev.time}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-200 border border-purple-400/25">
-                        {ev.daysUntil === 0 ? 'Hôm nay' : `${ev.daysUntil} ngày`}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteEvent(ev.id);
-                        }}
-                        className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        title="Xóa sự kiện"
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGoal(goal.id)}
+                      className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                    >
+                      <span
+                        className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                          goal.completed
+                            ? 'bg-emerald-500/80 border-emerald-400 text-white'
+                            : 'border-slate-500 hover:border-purple-400 bg-transparent'
+                        }`}
                       >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
+                        {goal.completed && <Check className="w-3 h-3 stroke-[3]" />}
+                      </span>
+                      <span
+                        className={`text-xs text-slate-200 break-words ${
+                          goal.completed ? 'line-through text-slate-400' : ''
+                        }`}
+                      >
+                        {goal.text}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteGoal(goal.id)}
+                      className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+                      title="Xóa mục tiêu"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
