@@ -662,6 +662,7 @@ export default function TimetableView({ currentUser: propsUser }) {
                 <input
                   type="text"
                   required
+                  autoFocus
                   placeholder="Toán Học / Vật Lý / Tiếng Anh..."
                   value={cellSubject}
                   onChange={(e) => setCellSubject(e.target.value)}

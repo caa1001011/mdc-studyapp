@@ -32,6 +32,7 @@ import {
 const EMPTY_CARD = () => ({
   id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
   front: '',
+  partOfSpeech: '',
   phonetic: '',
   hint: '',
   back: '',
@@ -581,9 +582,18 @@ export default function FlashcardView({ currentUser: propsUser }) {
                       <div className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white shimmer-text break-words">
                         {currentCard.front}
                       </div>
-                      {currentCard.phonetic && (
-                        <div className="mt-2 text-sm text-purple-300 font-mono">
-                          {currentCard.phonetic}
+                      {(currentCard.partOfSpeech || currentCard.phonetic) && (
+                        <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+                          {currentCard.partOfSpeech && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-400/30">
+                              {currentCard.partOfSpeech}
+                            </span>
+                          )}
+                          {currentCard.phonetic && (
+                            <span className="text-sm text-purple-300 font-mono">
+                              {currentCard.phonetic}
+                            </span>
+                          )}
                         </div>
                       )}
                       {currentCard.hint && (
@@ -791,11 +801,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Khối *
+                        Khối (tùy chọn)
                       </label>
                       <input
                         type="text"
-                        required
                         placeholder="VD: Khối 12"
                         value={grade}
                         onChange={(e) => setGrade(e.target.value)}
@@ -1032,6 +1041,13 @@ export default function FlashcardView({ currentUser: propsUser }) {
                         />
                         <input
                           type="text"
+                          placeholder="Loại từ (tùy chọn, VD: n, v, adj)"
+                          value={card.partOfSpeech || ''}
+                          onChange={(e) => handleUpdateDraftCard(idx, 'partOfSpeech', e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                        />
+                        <input
+                          type="text"
                           placeholder="Phiên âm IPA (tùy chọn)"
                           value={card.phonetic}
                           onChange={(e) => handleUpdateDraftCard(idx, 'phonetic', e.target.value)}
@@ -1042,7 +1058,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                           placeholder="Ví dụ minh họa (tùy chọn)"
                           value={card.example}
                           onChange={(e) => handleUpdateDraftCard(idx, 'example', e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                          className="sm:col-span-2 w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
                         />
                       </div>
                     </div>
