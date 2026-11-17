@@ -734,16 +734,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                        {activeLesson.storageType === 'google_drive' && isVideoLesson && activeLesson.driveFileId && (
-                          <button
-                            type="button"
-                            onClick={() => setUseDrivePreviewFallback((prev) => !prev)}
-                            className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer"
-                            title="Chuyển chế độ phát video nếu gặp lỗi xử lý"
-                          >
-                            {useDrivePreviewFallback ? 'Phát trực tiếp' : 'Trình phát Drive'}
-                          </button>
-                        )}
                         <button
                           type="button"
                           disabled={!prevItem}
