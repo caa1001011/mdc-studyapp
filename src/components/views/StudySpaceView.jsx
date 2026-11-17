@@ -1474,7 +1474,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
           ) : (
             <div className="space-y-2.5">
               {visibleRecentLessons.map((item) => {
-                const categoryInfo = LESSON_SUBFEATURES.find((c) => c.id === item.category);
                 const RecentIcon =
                   item.kind === 'folder'
                     ? Folder
@@ -1498,20 +1497,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
                           {item.title}
                         </h4>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 truncate">
-                          <span className="text-purple-300 font-medium">{item.subjectName}</span>
-                          {categoryInfo && (
-                            <>
-                              <span>•</span>
-                              <span>{categoryInfo.label}</span>
-                            </>
-                          )}
-                          {item.kind === 'lesson' && item.folderName && (
-                            <>
-                              <span>•</span>
-                              <span className="truncate">{item.folderName}</span>
-                            </>
-                          )}
+                        <div className="text-[11px] text-purple-300 font-medium mt-0.5 truncate">
+                          {item.subjectName}
                         </div>
                       </div>
                     </div>
