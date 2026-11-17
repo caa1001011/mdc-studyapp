@@ -504,6 +504,10 @@ export default function StudySpaceView({ currentUser: propsUser }) {
 
   const usesFolders = activeCategory === 'video' || activeCategory === 'mindmap';
 
+  const subjectFoldersCount = selectedSubject
+    ? folders.filter((f) => f.subjectId === selectedSubject.id).length
+    : 0;
+
   const subjectCategoryFolders = selectedSubject
     ? folders.filter((f) => f.subjectId === selectedSubject.id && (f.category || 'video') === activeCategory)
     : [];
@@ -552,8 +556,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                 </h1>
                 <p className="text-[11px] text-slate-400">
                   {activeLesson
-                    ? `${selectedSubject.name} • Chế độ chỉ xem`
-                    : `${subjectLessons.length} tài liệu / bài giảng`}
+                    ? selectedSubject.name
+                    : `${subjectFoldersCount} bài học`}
                 </p>
               </div>
             </div>
@@ -1065,7 +1069,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         <Upload className="w-4 h-4" />
                         <span>
                           {usesFolders && selectedFolder
-                            ? `Tải ${currentSubfeature.label.toLowerCase()} vào "${selectedFolder.name}" (Google Drive)`
+                            ? `Tải ${currentSubfeature.label.toLowerCase()} vào "${selectedFolder.name}"`
                             : `${currentSubfeature.uploadLabel} (Quản trị viên)`}
                         </span>
                       </div>
