@@ -889,7 +889,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       />
                     </div>
 
-                    {activeCategory === 'video' && !import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL && showScriptConfig && (
+                    {activeCategory === 'video' && !getSavedAppsScriptUrl() && showScriptConfig && (
                       <input
                         type="url"
                         value={appsScriptUrl}

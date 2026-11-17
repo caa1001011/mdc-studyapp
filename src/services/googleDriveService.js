@@ -2,6 +2,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 const DRIVE_ROOT_FOLDER_NAME = 'BeaconLearn';
+const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbysTls_-ixkdEhQl-g2lJe0uYORqDURQ2G862ujPPu3e-KcLCo6B86Z4UjcZoGb58xy/exec';
 const APPS_SCRIPT_URL_STORAGE_KEY = 'lumina_gdrive_apps_script_url';
 const SETTINGS_COLLECTION = 'app_settings';
 const DRIVE_SETTINGS_DOC = 'google_drive';
@@ -23,7 +24,7 @@ export function getSavedAppsScriptUrl() {
   return (
     import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
     localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) ||
-    ''
+    DEFAULT_APPS_SCRIPT_URL
   ).trim();
 }
 
@@ -46,7 +47,7 @@ export async function fetchAppsScriptUrl() {
     }
   }
 
-  return (localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) || '').trim();
+  return (localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) || DEFAULT_APPS_SCRIPT_URL).trim();
 }
 
 export async function saveAppsScriptUrl(url) {
