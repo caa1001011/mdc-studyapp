@@ -415,6 +415,72 @@ export async function fetchUserLessonProgress(username) {
 }
 
 /**
+ * Lấy danh sách tối đa 5 bài học / thư mục người dùng đã truy cập gần đây
+ */
+export async function fetchUserRecentLessons(username) {
+  if (!username) return [];
+  const cleanUsername = String(username).trim().toLowerCase();
+  const localKey = `lumina_recent_lessons_${cleanUsername}`;
+
+  if (db) {
+    try {
+      const progressRef = doc(db, PROGRESS_COLLECTION, cleanUsername);
+      const snap = await getDoc(progressRef);
+      if (snap.exists() && Array.isArray(snap.data()?.recentLessons)) {
+        const list = snap.data().recentLessons.slice(0, 5);
+        localStorage.setItem(localKey, JSON.stringify(list));
+        return list;
+      }
+    } catch (error) {
+      console.warn('Lỗi đọc danh sách bài học gần đây từ Firestore:', error);
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem(localKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Lưu lại bài học / thư mục người dùng vừa truy cập (giữ tối đa 5 bài gần nhất)
+ */
+export async function saveUserRecentLessons(username, recentList) {
+  if (!username) return [];
+  const cleanUsername = String(username).trim().toLowerCase();
+  const localKey = `lumina_recent_lessons_${cleanUsername}`;
+  const trimmed = (Array.isArray(recentList) ? recentList : []).slice(0, 5);
+
+  try {
+    localStorage.setItem(localKey, JSON.stringify(trimmed));
+  } catch {
+    // ignore storage quota errors
+  }
+
+  if (db) {
+    try {
+      const progressRef = doc(db, PROGRESS_COLLECTION, cleanUsername);
+      await setDoc(
+        progressRef,
+        {
+          username: cleanUsername,
+          recentLessons: trimmed,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.warn('Lỗi lưu danh sách bài học gần đây lên Firestore:', error);
+    }
+  }
+
+  return trimmed;
+}
+
+/**
  * Lưu tiến độ xem dở video bài giảng cho người dùng hiện tại
  */
 export async function saveUserLessonProgress(username, lesson, currentTime, duration) {

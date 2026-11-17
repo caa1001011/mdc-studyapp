@@ -46,7 +46,9 @@ import {
   deleteLessonFolder,
   deleteSubjectLesson,
   fetchUserLessonProgress,
-  saveUserLessonProgress
+  saveUserLessonProgress,
+  fetchUserRecentLessons,
+  saveUserRecentLessons
 } from '../../services/studyService';
 import {
   getDriveSubjectFolderName,
@@ -165,6 +167,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const [isTheaterMode, setIsTheaterMode] = useState(false);
   const [zoomedMindmap, setZoomedMindmap] = useState(null);
   const [zoomScale, setZoomScale] = useState(1);
+  const [recentLessons, setRecentLessons] = useState([]);
 
   // Admin Upload state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -186,12 +189,13 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     async function loadInitialData() {
       setIsLoadingLessons(true);
       try {
-        const [notes, lessons, progress, loadedFolders, savedScriptUrl] = await Promise.all([
+        const [notes, lessons, progress, loadedFolders, savedScriptUrl, loadedRecent] = await Promise.all([
           fetchUserNotes(username),
           fetchSubjectLessons(),
           fetchUserLessonProgress(username),
           fetchLessonFolders(),
           fetchAppsScriptUrl(),
+          fetchUserRecentLessons(username),
         ]);
 
         if (!isCancelled) {
@@ -200,6 +204,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
           setAllLessons(lessons);
           setLessonProgress(progress || {});
           setFolders(loadedFolders || []);
+          setRecentLessons(Array.isArray(loadedRecent) ? loadedRecent.slice(0, 5) : []);
           if (savedScriptUrl) {
             setAppsScriptUrl(savedScriptUrl);
             setShowScriptConfig(false);
@@ -328,27 +333,97 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     }
   };
 
-  // Mở thẳng video bài học từ mục "Bài Học Gần Đây"
-  const handleOpenRecentVideo = (progressItem) => {
-    const subject = STUDY_SUBJECTS.find((s) => s.id === progressItem.subjectId) || {
-      id: progressItem.subjectId,
-      name: progressItem.subjectName,
+  // Ghi nhận bài học / thư mục người dùng vừa truy cập (tối đa 5 bài gần nhất)
+  const trackRecentAccess = (entry) => {
+    if (!entry || !entry.id) return;
+    const item = {
+      ...entry,
+      accessedAt: new Date().toISOString(),
     };
-    const matchedLesson = allLessons.find((l) => l.id === progressItem.lessonId) || {
-      id: progressItem.lessonId,
-      subjectId: progressItem.subjectId,
-      subjectName: progressItem.subjectName,
-      category: 'video',
-      title: progressItem.title,
-      fileName: progressItem.fileName,
-      fileType: 'video',
-      url: progressItem.url,
+    setRecentLessons((prev) => {
+      const next = [item, ...prev.filter((x) => x.id !== item.id)].slice(0, 5);
+      saveUserRecentLessons(username, next);
+      return next;
+    });
+  };
+
+  const handleOpenFolder = (folder) => {
+    if (!folder || !selectedSubject) return;
+    setSelectedFolder(folder);
+    setUploadTitle('');
+    setUploadFile(null);
+    setUploadError('');
+    setUploadProgress(0);
+    trackRecentAccess({
+      id: folder.id,
+      kind: 'folder',
+      subjectId: selectedSubject.id,
+      subjectName: selectedSubject.name,
+      category: activeCategory,
+      folderId: folder.id,
+      folderName: folder.name,
+      title: folder.name,
+    });
+  };
+
+  const handleOpenLesson = (lesson) => {
+    if (!lesson) return;
+    hasSeekedRef.current = false;
+    setActiveLesson(lesson);
+    trackRecentAccess({
+      id: lesson.id,
+      kind: 'lesson',
+      subjectId: lesson.subjectId || selectedSubject?.id,
+      subjectName: lesson.subjectName || selectedSubject?.name || '',
+      category: getLessonCategory(lesson),
+      folderId: lesson.folderId || selectedFolder?.id || null,
+      folderName: lesson.folderName || selectedFolder?.name || null,
+      title: lesson.title,
+      fileType: lesson.fileType || null,
+    });
+  };
+
+  // Mở lại bài học / thư mục từ mục "Bài Học Gần Đây"
+  const handleOpenRecentItem = (item) => {
+    const subject = STUDY_SUBJECTS.find((s) => s.id === item.subjectId) || {
+      id: item.subjectId,
+      name: item.subjectName,
     };
 
     setSelectedSubject(subject);
-    setActiveCategory('video');
-    hasSeekedRef.current = false;
-    setActiveLesson(matchedLesson);
+    setActiveCategory(item.category || 'video');
+    setUploadTitle('');
+    setUploadFile(null);
+    setUploadError('');
+    setUploadProgress(0);
+
+    if (item.kind === 'folder') {
+      const matchedFolder = folders.find((f) => f.id === item.folderId || f.id === item.id) || {
+        id: item.folderId || item.id,
+        subjectId: item.subjectId,
+        subjectName: item.subjectName,
+        category: item.category || 'video',
+        name: item.folderName || item.title,
+      };
+      setSelectedFolder(matchedFolder);
+      setActiveLesson(null);
+      trackRecentAccess(item);
+      return;
+    }
+
+    const matchedLesson = allLessons.find((l) => l.id === item.id);
+    if (matchedLesson) {
+      const matchedFolder = matchedLesson.folderId
+        ? folders.find((f) => f.id === matchedLesson.folderId) || null
+        : null;
+      setSelectedFolder(matchedFolder);
+      hasSeekedRef.current = false;
+      setActiveLesson(matchedLesson);
+      trackRecentAccess({
+        ...item,
+        title: matchedLesson.title,
+      });
+    }
   };
 
   // Admin: Upload file / video bài giảng / sơ đồ tư duy vào thẻ môn học (lưu lên Google Drive)
@@ -478,18 +553,17 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     setActiveLesson(null);
   };
 
-  // Lọc danh sách video đang xem dở cho mục "Bài Học Gần Đây"
-  const recentInProgressVideos = Object.values(lessonProgress || {})
+  // Lọc danh sách bài học người dùng đã truy cập gần đây (tối đa 5 bài, bỏ bài đã bị xóa)
+  const visibleRecentLessons = recentLessons
     .filter((item) => {
-      if (!item || !item.currentTime || item.currentTime <= 0) return false;
-      if (item.duration && item.currentTime >= item.duration - 2) return false;
-      // Chỉ hiển thị bài học còn tồn tại (nếu danh sách bài học đã tải xong)
-      if (!isLoadingLessons && allLessons.length > 0) {
-        return allLessons.some((l) => l.id === item.lessonId);
+      if (!item) return false;
+      if (isLoadingLessons) return true;
+      if (item.kind === 'folder') {
+        return folders.some((f) => f.id === item.id || f.id === item.folderId);
       }
-      return allLessons.some((l) => l.id === item.lessonId);
+      return allLessons.some((l) => l.id === item.id);
     })
-    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    .slice(0, 5);
 
   const subjectLessons = selectedSubject
     ? allLessons.filter((l) => l.subjectId === selectedSubject.id)
@@ -945,11 +1019,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                           key={folder.id}
                           onClick={() => {
                             if (!isEditingThis) {
-                              setSelectedFolder(folder);
-                              setUploadTitle('');
-                              setUploadFile(null);
-                              setUploadError('');
-                              setUploadProgress(0);
+                              handleOpenFolder(folder);
                             }
                           }}
                           className="p-4 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 cursor-pointer transition-all flex items-center justify-between gap-3 group"
@@ -1241,10 +1311,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                   return (
                     <div
                       key={lesson.id}
-                      onClick={() => {
-                        hasSeekedRef.current = false;
-                        setActiveLesson(lesson);
-                      }}
+                      onClick={() => handleOpenLesson(lesson)}
                       className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-purple-400/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -1409,52 +1476,57 @@ export default function StudySpaceView({ currentUser: propsUser }) {
             <span>Bài Học Gần Đây</span>
           </h2>
 
-          {recentInProgressVideos.length === 0 ? (
+          {visibleRecentLessons.length === 0 ? (
             <div className="p-5 rounded-2xl glass-card border border-white/10 text-center text-xs text-slate-400">
               Chưa có bài học gần đây.
             </div>
           ) : (
             <div className="space-y-2.5">
-              {recentInProgressVideos.map((item) => {
-                const percent = item.duration
-                  ? Math.min(100, Math.round((item.currentTime / item.duration) * 100))
-                  : 0;
+              {visibleRecentLessons.map((item) => {
+                const categoryInfo = LESSON_SUBFEATURES.find((c) => c.id === item.category);
+                const RecentIcon =
+                  item.kind === 'folder'
+                    ? Folder
+                    : item.category === 'mindmap'
+                    ? Network
+                    : item.category === 'exercise'
+                    ? ClipboardCheck
+                    : Play;
 
                 return (
                   <div
-                    key={item.lessonId}
-                    onClick={() => handleOpenRecentVideo(item)}
+                    key={`${item.kind}-${item.id}`}
+                    onClick={() => handleOpenRecentItem(item)}
                     className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-purple-400/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 group-hover:scale-105 transition-transform flex-shrink-0">
-                        <Play className="w-4 h-4 fill-purple-300" />
+                        <RecentIcon className="w-4 h-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
                           {item.title}
                         </h4>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 truncate">
                           <span className="text-purple-300 font-medium">{item.subjectName}</span>
-                          <span>•</span>
-                          <span className="font-mono">
-                            {formatDuration(item.currentTime)}
-                            {item.duration ? ` / ${formatDuration(item.duration)}` : ''}
-                          </span>
+                          {categoryInfo && (
+                            <>
+                              <span>•</span>
+                              <span>{categoryInfo.label}</span>
+                            </>
+                          )}
+                          {item.kind === 'lesson' && item.folderName && (
+                            <>
+                              <span>•</span>
+                              <span className="truncate">{item.folderName}</span>
+                            </>
+                          )}
                         </div>
-                        {item.duration > 0 && (
-                          <div className="w-full h-1 rounded-full bg-white/10 overflow-hidden mt-1.5">
-                            <div
-                              className="h-full bg-gradient-to-r from-purple-500 to-indigo-400 rounded-full"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
-                        )}
                       </div>
                     </div>
 
                     <span className="text-[11px] font-semibold text-purple-300 flex-shrink-0">
-                      Xem tiếp
+                      Mở lại
                     </span>
                   </div>
                 );
