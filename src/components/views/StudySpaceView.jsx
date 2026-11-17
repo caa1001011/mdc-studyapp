@@ -882,7 +882,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       />
                     </div>
 
-                    {activeCategory === 'video' && !import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                    {activeCategory === 'video' && !getSavedGoogleClientId() && (
                       <input
                         type="text"
                         value={googleClientId}

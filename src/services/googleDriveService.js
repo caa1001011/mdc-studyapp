@@ -1,5 +1,6 @@
 const DRIVE_ROOT_FOLDER_NAME = 'BeaconLearn';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
+const DEFAULT_GOOGLE_CLIENT_ID = '617332611591-5c5hvk72bavv8jho3d1cqehden7a5ho1.apps.googleusercontent.com';
 const TOKEN_STORAGE_KEY = 'lumina_gdrive_access_token';
 const TOKEN_EXP_STORAGE_KEY = 'lumina_gdrive_token_expires_at';
 const CLIENT_ID_STORAGE_KEY = 'lumina_google_client_id';
@@ -21,7 +22,7 @@ export function getSavedGoogleClientId() {
   return (
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
     localStorage.getItem(CLIENT_ID_STORAGE_KEY) ||
-    ''
+    DEFAULT_GOOGLE_CLIENT_ID
   ).trim();
 }
 
