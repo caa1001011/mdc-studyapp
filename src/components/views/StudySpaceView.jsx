@@ -333,15 +333,15 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     }
   };
 
-  // Ghi nhận bài học / thư mục người dùng vừa truy cập (tối đa 5 bài gần nhất)
+  // Ghi nhận bài học người dùng vừa truy cập (chỉ lưu bài học, không lưu thư mục, tối đa 5 bài gần nhất)
   const trackRecentAccess = (entry) => {
-    if (!entry || !entry.id) return;
+    if (!entry || !entry.id || entry.kind === 'folder') return;
     const item = {
       ...entry,
       accessedAt: new Date().toISOString(),
     };
     setRecentLessons((prev) => {
-      const next = [item, ...prev.filter((x) => x.id !== item.id)].slice(0, 5);
+      const next = [item, ...prev.filter((x) => x.kind !== 'folder' && x.id !== item.id)].slice(0, 5);
       saveUserRecentLessons(username, next);
       return next;
     });
@@ -354,16 +354,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     setUploadFile(null);
     setUploadError('');
     setUploadProgress(0);
-    trackRecentAccess({
-      id: folder.id,
-      kind: 'folder',
-      subjectId: selectedSubject.id,
-      subjectName: selectedSubject.name,
-      category: activeCategory,
-      folderId: folder.id,
-      folderName: folder.name,
-      title: folder.name,
-    });
   };
 
   const handleOpenLesson = (lesson) => {
@@ -554,14 +544,11 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     setActiveLesson(null);
   };
 
-  // Lọc danh sách bài học người dùng đã truy cập gần đây (tối đa 5 bài, bỏ bài đã bị xóa)
+  // Lọc danh sách bài học người dùng đã truy cập gần đây (chỉ hiển thị bài học, không hiển thị thư mục, tối đa 5 bài)
   const visibleRecentLessons = recentLessons
     .filter((item) => {
-      if (!item) return false;
+      if (!item || item.kind === 'folder') return false;
       if (isLoadingLessons) return true;
-      if (item.kind === 'folder') {
-        return folders.some((f) => f.id === item.id || f.id === item.folderId);
-      }
       return allLessons.some((l) => l.id === item.id);
     })
     .slice(0, 5);
