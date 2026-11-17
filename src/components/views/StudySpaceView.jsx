@@ -35,7 +35,7 @@ import {
   saveUserNotes,
   fetchSubjectLessons,
   uploadSubjectLesson,
-  uploadDriveVideoLesson,
+  uploadDriveLesson,
   fetchLessonFolders,
   createLessonFolder,
   renameLessonFolder,
@@ -250,7 +250,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
       const created = await createLessonFolder({
         subjectId: selectedSubject.id,
         subjectName: selectedSubject.name,
-        category: 'video',
+        category: activeCategory,
         name: clean,
         createdBy: username,
       });
@@ -329,12 +329,13 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     setActiveLesson(matchedLesson);
   };
 
-  // Admin: Upload file / video bài giảng vào thẻ môn học (Video trong thư mục tự động lưu lên Google Drive)
+  // Admin: Upload file / video bài giảng / sơ đồ tư duy vào thẻ môn học (lưu lên Google Drive)
   const handleUploadLesson = async (e) => {
     e.preventDefault();
     if (!isAdmin || !selectedSubject || !uploadFile || isUploading) return;
-    if (activeCategory === 'video' && !selectedFolder) {
-      setUploadError('Vui lòng chọn hoặc tạo thư mục bài học trước khi đăng video.');
+    const isFolderCategory = activeCategory === 'video' || activeCategory === 'mindmap';
+    if (isFolderCategory && !selectedFolder) {
+      setUploadError('Vui lòng chọn hoặc tạo thư mục bài học trước khi tải lên.');
       return;
     }
 
@@ -344,12 +345,13 @@ export default function StudySpaceView({ currentUser: propsUser }) {
 
     try {
       let created;
-      if (activeCategory === 'video') {
+      if (isFolderCategory) {
         if (appsScriptUrl) {
           await saveAppsScriptUrl(appsScriptUrl);
         }
-        created = await uploadDriveVideoLesson({
+        created = await uploadDriveLesson({
           subject: selectedSubject,
+          category: activeCategory,
           folderId: selectedFolder.id,
           folderName: selectedFolder.name,
           title: uploadTitle,
@@ -474,14 +476,16 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     (l) => getLessonCategory(l) === activeCategory
   );
 
-  const subjectVideoFolders = selectedSubject
-    ? folders.filter((f) => f.subjectId === selectedSubject.id && (f.category || 'video') === 'video')
+  const usesFolders = activeCategory === 'video' || activeCategory === 'mindmap';
+
+  const subjectCategoryFolders = selectedSubject
+    ? folders.filter((f) => f.subjectId === selectedSubject.id && (f.category || 'video') === activeCategory)
     : [];
 
   const driveSubjectName = getDriveSubjectFolderName(selectedSubject);
 
   const displayedLessons =
-    activeCategory === 'video' && selectedFolder
+    usesFolders && selectedFolder
       ? currentTabLessons.filter((l) => l.folderId === selectedFolder.id)
       : currentTabLessons;
 
@@ -531,22 +535,24 @@ export default function StudySpaceView({ currentUser: propsUser }) {
         </div>
 
         {activeLesson ? (
-          activeLesson.fileType === 'video' ? (
-            /* YOUTUBE-STYLE ONLINE VIDEO WATCH VIEW */
+          activeLesson.fileType === 'video' || getLessonCategory(activeLesson) === 'mindmap' ? (
+            /* YOUTUBE-STYLE ONLINE WATCH / VIEWER FOR VIDEO & MINDMAP */
             (() => {
-              const playlist = currentTabLessons.filter((l) =>
-                activeLesson.folderId ? l.folderId === activeLesson.folderId : !l.folderId
-              );
+              const lessonCat = getLessonCategory(activeLesson);
+              const isVideoLesson = activeLesson.fileType === 'video';
+              const playlist = subjectLessons
+                .filter((l) => getLessonCategory(l) === lessonCat)
+                .filter((l) => (activeLesson.folderId ? l.folderId === activeLesson.folderId : !l.folderId));
               const currentIdx = playlist.findIndex((l) => l.id === activeLesson.id);
-              const prevVideo = currentIdx > 0 ? playlist[currentIdx - 1] : null;
-              const nextVideo = currentIdx >= 0 && currentIdx < playlist.length - 1 ? playlist[currentIdx + 1] : null;
+              const prevItem = currentIdx > 0 ? playlist[currentIdx - 1] : null;
+              const nextItem = currentIdx >= 0 && currentIdx < playlist.length - 1 ? playlist[currentIdx + 1] : null;
               const driveEmbedSrc = activeLesson.driveFileId
                 ? `https://drive.google.com/file/d/${activeLesson.driveFileId}/preview`
                 : activeLesson.url;
 
               return (
                 <div className={`grid grid-cols-1 gap-5 ${isTheaterMode ? '' : 'lg:grid-cols-3 items-start'}`}>
-                  {/* Cột Trình phát video chính */}
+                  {/* Cột Trình xem / phát chính */}
                   <div className={isTheaterMode ? 'space-y-3' : 'lg:col-span-2 space-y-3'}>
                     <div
                       className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/15 bg-black shadow-2xl select-none"
@@ -562,13 +568,12 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                             allowFullScreen
                             className="w-full h-full border-0 bg-black"
                           />
-                          {/* Che góc pop-out của Drive để giữ trải nghiệm xem nội bộ như YouTube */}
                           <div
                             className="absolute top-0 right-0 w-14 h-14 z-10 bg-transparent"
-                            title="Trình phát video trực tuyến"
+                            title="Trình xem trực tuyến"
                           />
                         </>
-                      ) : (
+                      ) : isVideoLesson ? (
                         <video
                           key={activeLesson.id}
                           ref={videoRef}
@@ -583,10 +588,27 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                           onEnded={handleVideoPauseOrEnd}
                           className="w-full h-full bg-black outline-none"
                         />
+                      ) : activeLesson.fileType === 'image' ? (
+                        <div className="w-full h-full flex items-center justify-center p-3 bg-slate-900/60">
+                          <img
+                            src={activeLesson.url}
+                            alt={activeLesson.title}
+                            draggable={false}
+                            onContextMenu={(e) => e.preventDefault()}
+                            className="max-h-full max-w-full object-contain rounded-xl pointer-events-none select-none"
+                          />
+                        </div>
+                      ) : (
+                        <iframe
+                          key={activeLesson.id}
+                          title={activeLesson.title}
+                          src={`${activeLesson.url}#toolbar=0&navpanes=0`}
+                          className="w-full h-full border-0 bg-white"
+                        />
                       )}
                     </div>
 
-                    {/* Thanh thông tin & điều khiển dưới video giống YouTube */}
+                    {/* Thanh thông tin & điều khiển dưới trình xem */}
                     <div className="p-4 rounded-2xl glass-card border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="min-w-0">
                         <h2 className="text-base sm:text-lg font-bold font-display text-white truncate">
@@ -603,17 +625,17 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                             </span>
                           )}
                           <span>•</span>
-                          <span>Phát trực tuyến</span>
+                          <span>{isVideoLesson ? 'Phát trực tuyến' : 'Xem trực tuyến'}</span>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
-                          disabled={!prevVideo}
-                          onClick={() => prevVideo && setActiveLesson(prevVideo)}
+                          disabled={!prevItem}
+                          onClick={() => prevItem && setActiveLesson(prevItem)}
                           className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-                          title="Video trước"
+                          title="Bài trước"
                         >
                           <ChevronLeft className="w-3.5 h-3.5" />
                           <span>Trước</span>
@@ -621,10 +643,10 @@ export default function StudySpaceView({ currentUser: propsUser }) {
 
                         <button
                           type="button"
-                          disabled={!nextVideo}
-                          onClick={() => nextVideo && setActiveLesson(nextVideo)}
+                          disabled={!nextItem}
+                          onClick={() => nextItem && setActiveLesson(nextItem)}
                           className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-                          title="Video tiếp theo"
+                          title="Tiếp theo"
                         >
                           <span>Tiếp theo</span>
                           <ChevronRight className="w-3.5 h-3.5" />
@@ -634,36 +656,42 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                           type="button"
                           onClick={() => setIsTheaterMode((prev) => !prev)}
                           className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer"
-                          title={isTheaterMode ? 'Thu gọn trình phát' : 'Chế độ rạp chiếu phim'}
+                          title={isTheaterMode ? 'Thu gọn trình xem' : 'Chế độ mở rộng'}
                         >
                           {isTheaterMode ? (
                             <Minimize2 className="w-3.5 h-3.5" />
                           ) : (
                             <Maximize2 className="w-3.5 h-3.5" />
                           )}
-                          <span>{isTheaterMode ? 'Mặc định' : 'Rạp phim'}</span>
+                          <span>{isTheaterMode ? 'Mặc định' : 'Mở rộng'}</span>
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  {/* Danh sách phát bên phải (Playlist giống YouTube) */}
+                  {/* Danh sách trong cùng thư mục bên phải */}
                   <div className="rounded-2xl glass-card border border-white/10 p-3.5 space-y-3">
                     <div className="flex items-center justify-between pb-2 border-b border-white/10">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Video className="w-4 h-4 text-purple-300 shrink-0" />
+                        {isVideoLesson ? (
+                          <Video className="w-4 h-4 text-purple-300 shrink-0" />
+                        ) : (
+                          <Network className="w-4 h-4 text-purple-300 shrink-0" />
+                        )}
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 truncate">
-                          Danh sách phát {activeLesson.folderName ? `• ${activeLesson.folderName}` : ''}
+                          {isVideoLesson ? 'Danh sách phát' : 'Danh sách sơ đồ'}{' '}
+                          {activeLesson.folderName ? `• ${activeLesson.folderName}` : ''}
                         </h3>
                       </div>
                       <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                        {currentIdx >= 0 ? `${currentIdx + 1}/${playlist.length}` : `${playlist.length} video`}
+                        {currentIdx >= 0 ? `${currentIdx + 1}/${playlist.length}` : `${playlist.length} mục`}
                       </span>
                     </div>
 
                     <div className="space-y-2 max-h-[460px] overflow-y-auto pr-0.5">
                       {playlist.map((item, idx) => {
                         const isPlaying = item.id === activeLesson.id;
+                        const ItemIcon = isVideoLesson ? Play : Network;
                         return (
                           <button
                             key={item.id}
@@ -685,14 +713,14 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                                   : 'bg-white/[0.05] text-slate-400'
                               }`}
                             >
-                              <Play className={`w-3.5 h-3.5 ${isPlaying ? 'fill-current' : ''}`} />
+                              <ItemIcon className={`w-3.5 h-3.5 ${isPlaying && isVideoLesson ? 'fill-current' : ''}`} />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="text-xs font-bold text-white truncate">
                                 {idx + 1}. {item.title}
                               </div>
                               <div className="text-[10px] text-slate-400 mt-0.5">
-                                {isPlaying ? 'Đang phát' : 'Nhấn để xem'}
+                                {isPlaying ? (isVideoLesson ? 'Đang phát' : 'Đang xem') : 'Nhấn để xem'}
                               </div>
                             </div>
                           </button>
@@ -794,14 +822,14 @@ export default function StudySpaceView({ currentUser: propsUser }) {
               })}
             </div>
 
-            {/* CẤP 1 CỦA VIDEO BÀI GIẢNG: DANH SÁCH THƯ MỤC BÀI HỌC */}
-            {activeCategory === 'video' && !selectedFolder ? (
+            {/* CẤP 1 CỦA VIDEO BÀI GIẢNG & SƠ ĐỒ TƯ DUY: DANH SÁCH THƯ MỤC BÀI HỌC */}
+            {usesFolders && !selectedFolder ? (
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h2 className="text-sm font-bold text-white font-display flex items-center gap-2">
                       <Folder className="w-4 h-4 text-amber-400" />
-                      <span>Thư mục bài học ({subjectVideoFolders.length})</span>
+                      <span>Thư mục bài học ({subjectCategoryFolders.length})</span>
                     </h2>
                     {isAdmin && (
                       <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
@@ -872,7 +900,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
                     <p>Đang tải danh sách thư mục...</p>
                   </div>
-                ) : subjectVideoFolders.length === 0 ? (
+                ) : subjectCategoryFolders.length === 0 ? (
                   <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
                     {isAdmin
                       ? `Chưa có thư mục bài học nào trong môn ${selectedSubject.name}. Nhấn "Tạo thư mục bài học" để bắt đầu.`
@@ -880,8 +908,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {subjectVideoFolders.map((folder) => {
-                      const videoCount = currentTabLessons.filter((l) => l.folderId === folder.id).length;
+                    {subjectCategoryFolders.map((folder) => {
+                      const itemCount = currentTabLessons.filter((l) => l.folderId === folder.id).length;
                       const isEditingThis = editingFolderId === folder.id;
 
                       return (
@@ -927,7 +955,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                                 </h4>
                               )}
                               <p className="text-[11px] text-slate-400 mt-0.5">
-                                {videoCount} video bài giảng
+                                {itemCount} {activeCategory === 'video' ? 'video bài giảng' : 'sơ đồ tư duy'}
                               </p>
                             </div>
                           </div>
@@ -967,8 +995,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
               </div>
             ) : (
               <>
-                {/* Breadcrumb khi đang ở bên trong 1 thư mục Video bài giảng */}
-                {activeCategory === 'video' && selectedFolder && (
+                {/* Breadcrumb khi đang ở bên trong 1 thư mục */}
+                {usesFolders && selectedFolder && (
                   <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl glass-card border border-white/10">
                     <div className="flex items-center gap-2 min-w-0">
                       <button
@@ -1010,8 +1038,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       <div className="flex items-center gap-2 text-xs font-bold text-purple-300 uppercase tracking-wider">
                         <Upload className="w-4 h-4" />
                         <span>
-                          {activeCategory === 'video' && selectedFolder
-                            ? `Tải video vào "${selectedFolder.name}" (Google Drive)`
+                          {usesFolders && selectedFolder
+                            ? `Tải ${currentSubfeature.label.toLowerCase()} vào "${selectedFolder.name}" (Google Drive)`
                             : `${currentSubfeature.uploadLabel} (Quản trị viên)`}
                         </span>
                       </div>
@@ -1043,7 +1071,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       />
                     </div>
 
-                    {activeCategory === 'video' && !getSavedAppsScriptUrl() && showScriptConfig && (
+                    {usesFolders && !getSavedAppsScriptUrl() && showScriptConfig && (
                       <input
                         type="url"
                         value={appsScriptUrl}
@@ -1060,7 +1088,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[11px] text-slate-300">
                           <span>
-                            {activeCategory === 'video' && selectedFolder
+                            {usesFolders && selectedFolder
                               ? `Đang tải lên My Drive\\BeaconLearn\\${driveSubjectName}\\${selectedFolder.name}...`
                               : 'Đang tải lên Firebase Storage...'}
                           </span>
@@ -1105,8 +1133,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                   </div>
                 ) : displayedLessons.length === 0 ? (
                   <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
-                    {activeCategory === 'video' && selectedFolder
-                      ? `Chưa có video bài giảng nào trong "${selectedFolder.name}".`
+                    {usesFolders && selectedFolder
+                      ? `Chưa có ${currentSubfeature.label.toLowerCase()} nào trong "${selectedFolder.name}".`
                       : `${currentSubfeature.emptyText} trong môn ${selectedSubject.name}.`}
                   </div>
                 ) : (

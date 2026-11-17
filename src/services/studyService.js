@@ -17,7 +17,7 @@ import {
 } from 'firebase/storage';
 import { db, storage } from './firebase';
 import {
-  uploadVideoToGoogleDrive,
+  uploadFileToGoogleDrive,
   deleteFileFromGoogleDrive
 } from './googleDriveService';
 
@@ -225,7 +225,7 @@ export async function uploadSubjectLesson({
 /**
  * Lấy danh sách thư mục bài học theo môn & loại (VD: Video bài giảng)
  */
-export async function fetchLessonFolders(subjectId, category = 'video') {
+export async function fetchLessonFolders(subjectId, category = null) {
   if (!db) return [];
 
   try {
@@ -301,11 +301,12 @@ export async function deleteLessonFolder(folderId) {
 }
 
 /**
- * Upload video bài giảng trực tiếp lên Google Drive cá nhân (My Drive\BeaconLearn\<Môn>\<Thư mục>\<file>)
- * và lưu metadata vào Firestore
+ * Upload bài học (video bài giảng, sơ đồ tư duy...) trực tiếp lên Google Drive cá nhân
+ * (My Drive\BeaconLearn\<Môn>\<Thư mục>\<file>) và lưu metadata vào Firestore
  */
-export async function uploadDriveVideoLesson({
+export async function uploadDriveLesson({
   subject,
+  category = 'video',
   folderId,
   folderName,
   title,
@@ -318,7 +319,7 @@ export async function uploadDriveVideoLesson({
     throw new Error('Chưa cấu hình Firebase Firestore.');
   }
 
-  const driveResult = await uploadVideoToGoogleDrive({
+  const driveResult = await uploadFileToGoogleDrive({
     file,
     title,
     subject,
@@ -328,17 +329,18 @@ export async function uploadDriveVideoLesson({
   });
 
   const lessonId = `lesson-${Date.now()}`;
+  const detectedType = detectFileType(file);
   const lessonData = {
     id: lessonId,
     subjectId: subject.id,
     subjectName: subject.name,
-    category: 'video',
+    category: category || 'video',
     folderId,
     folderName,
     title: title?.trim() || driveResult.fileName,
     fileName: driveResult.fileName,
-    fileType: 'video',
-    mimeType: file.type || 'video/mp4',
+    fileType: detectedType,
+    mimeType: file.type || '',
     size: file.size || 0,
     url: driveResult.embedUrl,
     webViewLink: driveResult.webViewLink,
@@ -353,6 +355,8 @@ export async function uploadDriveVideoLesson({
   await setDoc(doc(db, LESSONS_COLLECTION, lessonId), lessonData);
   return lessonData;
 }
+
+export const uploadDriveVideoLesson = uploadDriveLesson;
 
 /**
  * Xóa một bài học khỏi Firestore và Firebase Storage / Google Drive (Chỉ dành cho Admin)

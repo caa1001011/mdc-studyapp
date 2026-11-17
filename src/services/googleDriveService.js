@@ -102,11 +102,11 @@ async function callAppsScript(appsScriptUrl, payload) {
 }
 
 /**
- * Upload video lên Google Drive cá nhân của chủ hệ thống thông qua Google Apps Script Bridge
- * Đường dẫn: My Drive\BeaconLearn\<Môn>\<Thư mục bài>\<Tên file>
+ * Upload tệp (video bài giảng, sơ đồ tư duy...) lên Google Drive cá nhân của chủ hệ thống
+ * thông qua Google Apps Script Bridge: My Drive\BeaconLearn\<Môn>\<Thư mục bài>\<Tên file>
  * Không hiện popup chọn tài khoản Google với bất kỳ quản trị viên nào.
  */
-export async function uploadVideoToGoogleDrive({
+export async function uploadFileToGoogleDrive({
   file,
   title,
   subject,
@@ -114,19 +114,19 @@ export async function uploadVideoToGoogleDrive({
   appsScriptUrl = '',
   onProgress,
 }) {
-  if (!file) throw new Error('Vui lòng chọn tệp video để tải lên.');
+  if (!file) throw new Error('Vui lòng chọn tệp để tải lên.');
 
   const endpoint = String(appsScriptUrl || '').trim() || (await fetchAppsScriptUrl());
   if (!endpoint) {
     throw new Error(
-      'Chưa cấu hình Google Apps Script Web App URL. Vui lòng dán URL Apps Script (triển khai từ google-apps-script/DriveUploadBridge.gs) để mọi quản trị viên tự động tải video lên Google Drive của bạn.'
+      'Chưa cấu hình Google Apps Script Web App URL. Vui lòng dán URL Apps Script (triển khai từ google-apps-script/DriveUploadBridge.gs) để mọi quản trị viên tự động tải tệp lên Google Drive của bạn.'
     );
   }
 
   const subjectFolderName = getDriveSubjectFolderName(subject);
   const cleanFolderName = String(folderName || '').trim() || 'Bài học';
   const targetFileName = buildTargetFileName(title, file.name);
-  const mimeType = file.type || 'video/mp4';
+  const mimeType = file.type || 'application/octet-stream';
 
   // 1. Nhờ Apps Script (chạy dưới tài khoản Google Drive của bạn) tạo thư mục & phiên Resumable Upload
   const initData = await callAppsScript(endpoint, {
@@ -198,6 +198,8 @@ export async function uploadVideoToGoogleDrive({
     webViewLink,
   };
 }
+
+export const uploadVideoToGoogleDrive = uploadFileToGoogleDrive;
 
 /**
  * Xóa file trên Google Drive (best-effort khi Admin xóa bài giảng)
