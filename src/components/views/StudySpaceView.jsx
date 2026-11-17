@@ -51,7 +51,6 @@ import {
   saveUserRecentLessons
 } from '../../services/studyService';
 import {
-  getDriveSubjectFolderName,
   fetchAppsScriptUrl,
   getSavedAppsScriptUrl,
   saveAppsScriptUrl
@@ -584,8 +583,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     ? folders.filter((f) => f.subjectId === selectedSubject.id && (f.category || 'video') === activeCategory)
     : [];
 
-  const driveSubjectName = getDriveSubjectFolderName(selectedSubject);
-
   const displayedLessons =
     usesFolders && selectedFolder
       ? currentTabLessons.filter((l) => l.folderId === selectedFolder.id)
@@ -961,11 +958,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       <Folder className="w-4 h-4 text-amber-400" />
                       <span>Thư mục bài học ({subjectCategoryFolders.length})</span>
                     </h2>
-                    {isAdmin && (
-                      <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                        Đường dẫn Google Drive: My Drive\BeaconLearn\{driveSubjectName}\&lt;Tên thư mục&gt;
-                      </p>
-                    )}
                   </div>
 
                   {isAdmin && (
@@ -1145,12 +1137,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         </span>
                       </div>
                     </div>
-
-                    {isAdmin && (
-                      <span className="text-[11px] font-mono text-slate-400 truncate">
-                        My Drive\BeaconLearn\{driveSubjectName}\{selectedFolder.name}
-                      </span>
-                    )}
                   </div>
                 )}
 
@@ -1215,7 +1201,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         <div className="flex items-center justify-between text-[11px] text-slate-300">
                           <span>
                             {usesFolders && selectedFolder
-                              ? `Đang tải lên My Drive\\BeaconLearn\\${driveSubjectName}\\${selectedFolder.name}...`
+                              ? `Đang tải lên thư mục "${selectedFolder.name}"...`
                               : 'Đang tải lên Firebase Storage...'}
                           </span>
                           <span className="font-mono font-bold text-purple-300">{uploadProgress}%</span>
