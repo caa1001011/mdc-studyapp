@@ -82,13 +82,20 @@ function buildTargetFileName(title, originalFileName) {
 }
 
 async function callAppsScript(appsScriptUrl, payload) {
-  const res = await fetch(appsScriptUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-    },
-    body: JSON.stringify(payload),
-  });
+  let res;
+  try {
+    res = await fetch(appsScriptUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error(
+      'Không kết nối được Google Apps Script (kiểm tra lại mục "Who has access / Ai có quyền truy cập" trong Apps Script đã chọn "Anyone / Bất kỳ ai" chưa).'
+    );
+  }
 
   if (!res.ok) {
     throw new Error(`Không thể kết nối Google Apps Script (HTTP ${res.status}).`);
