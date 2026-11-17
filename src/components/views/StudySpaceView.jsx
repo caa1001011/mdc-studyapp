@@ -43,8 +43,9 @@ import {
 } from '../../services/studyService';
 import {
   getDriveSubjectFolderName,
-  getSavedGoogleClientId,
-  saveGoogleClientId
+  fetchAppsScriptUrl,
+  getSavedAppsScriptUrl,
+  saveAppsScriptUrl
 } from '../../services/googleDriveService';
 
 const ICONS_MAP = {
@@ -136,7 +137,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const [editingFolderId, setEditingFolderId] = useState(null);
   const [editingFolderName, setEditingFolderName] = useState('');
   const [folderError, setFolderError] = useState('');
-  const [googleClientId, setGoogleClientId] = useState(() => getSavedGoogleClientId());
+  const [appsScriptUrl, setAppsScriptUrl] = useState(() => getSavedAppsScriptUrl());
+  const [showScriptConfig, setShowScriptConfig] = useState(() => !getSavedAppsScriptUrl());
 
   // Admin Upload state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -158,11 +160,12 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     async function loadInitialData() {
       setIsLoadingLessons(true);
       try {
-        const [notes, lessons, progress, loadedFolders] = await Promise.all([
+        const [notes, lessons, progress, loadedFolders, savedScriptUrl] = await Promise.all([
           fetchUserNotes(username),
           fetchSubjectLessons(),
           fetchUserLessonProgress(username),
           fetchLessonFolders(),
+          fetchAppsScriptUrl(),
         ]);
 
         if (!isCancelled) {
@@ -171,6 +174,10 @@ export default function StudySpaceView({ currentUser: propsUser }) {
           setAllLessons(lessons);
           setLessonProgress(progress || {});
           setFolders(loadedFolders || []);
+          if (savedScriptUrl) {
+            setAppsScriptUrl(savedScriptUrl);
+            setShowScriptConfig(false);
+          }
         }
       } catch (err) {
         console.error('Lỗi khi tải dữ liệu trang Bài học:', err);
@@ -334,8 +341,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     try {
       let created;
       if (activeCategory === 'video') {
-        if (googleClientId) {
-          saveGoogleClientId(googleClientId);
+        if (appsScriptUrl) {
+          await saveAppsScriptUrl(appsScriptUrl);
         }
         created = await uploadDriveVideoLesson({
           subject: selectedSubject,
@@ -344,7 +351,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
           title: uploadTitle,
           file: uploadFile,
           uploadedBy: username,
-          clientId: googleClientId,
+          appsScriptUrl,
           onProgress: (pct) => setUploadProgress(pct),
         });
       } else {
@@ -882,15 +889,15 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       />
                     </div>
 
-                    {activeCategory === 'video' && !getSavedGoogleClientId() && (
+                    {activeCategory === 'video' && !import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL && showScriptConfig && (
                       <input
-                        type="text"
-                        value={googleClientId}
+                        type="url"
+                        value={appsScriptUrl}
                         onChange={(e) => {
-                          setGoogleClientId(e.target.value);
-                          saveGoogleClientId(e.target.value);
+                          setAppsScriptUrl(e.target.value);
+                          saveAppsScriptUrl(e.target.value);
                         }}
-                        placeholder="Google OAuth Client ID (chỉ nhập 1 lần nếu chưa đặt VITE_GOOGLE_CLIENT_ID trong .env)"
+                        placeholder="Google Apps Script Web App URL (chỉ dán 1 lần để mọi Admin tự động tải lên Drive của bạn)"
                         className="w-full px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
                       />
                     )}

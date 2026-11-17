@@ -311,7 +311,7 @@ export async function uploadDriveVideoLesson({
   title,
   file,
   uploadedBy,
-  clientId = '',
+  appsScriptUrl = '',
   onProgress,
 }) {
   if (!db) {
@@ -323,7 +323,7 @@ export async function uploadDriveVideoLesson({
     title,
     subject,
     folderName,
-    clientId,
+    appsScriptUrl,
     onProgress,
   });
 
