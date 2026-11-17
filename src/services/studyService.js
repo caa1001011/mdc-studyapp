@@ -16,9 +16,14 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { db, storage } from './firebase';
+import {
+  uploadVideoToGoogleDrive,
+  deleteFileFromGoogleDrive
+} from './googleDriveService';
 
 const NOTES_COLLECTION = 'study_notes';
 const LESSONS_COLLECTION = 'subject_lessons';
+const FOLDERS_COLLECTION = 'lesson_folders';
 const PROGRESS_COLLECTION = 'lesson_progress';
 const USERS_COLLECTION = 'users';
 
@@ -218,7 +223,139 @@ export async function uploadSubjectLesson({
 }
 
 /**
- * Xóa một bài học khỏi Firestore và Firebase Storage (Chỉ dành cho Admin)
+ * Lấy danh sách thư mục bài học theo môn & loại (VD: Video bài giảng)
+ */
+export async function fetchLessonFolders(subjectId, category = 'video') {
+  if (!db) return [];
+
+  try {
+    const foldersRef = collection(db, FOLDERS_COLLECTION);
+    const q = subjectId
+      ? query(foldersRef, where('subjectId', '==', subjectId))
+      : foldersRef;
+    const snap = await getDocs(q);
+
+    const folders = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (!category || data.category === category) {
+        folders.push({ id: docSnap.id, ...data });
+      }
+    });
+
+    return folders.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  } catch (error) {
+    console.error('Lỗi tải danh sách thư mục bài học:', error);
+    return [];
+  }
+}
+
+/**
+ * Tạo thư mục bài học mới (VD: "Bài học 1")
+ */
+export async function createLessonFolder({ subjectId, subjectName, category = 'video', name, createdBy }) {
+  if (!db) {
+    throw new Error('Chưa kết nối Firebase Firestore.');
+  }
+  const cleanName = String(name || '').trim();
+  if (!cleanName) {
+    throw new Error('Vui lòng nhập tên thư mục bài học.');
+  }
+
+  const folderId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const folderData = {
+    id: folderId,
+    subjectId,
+    subjectName: subjectName || '',
+    category,
+    name: cleanName,
+    createdBy: createdBy || 'admin',
+    createdAt: new Date().toISOString(),
+  };
+
+  await setDoc(doc(db, FOLDERS_COLLECTION, folderId), folderData);
+  return folderData;
+}
+
+/**
+ * Đổi tên thư mục bài học
+ */
+export async function renameLessonFolder(folderId, newName) {
+  if (!db) throw new Error('Chưa kết nối Firebase Firestore.');
+  const cleanName = String(newName || '').trim();
+  if (!cleanName) throw new Error('Tên thư mục không được để trống.');
+
+  await updateDoc(doc(db, FOLDERS_COLLECTION, folderId), {
+    name: cleanName,
+    updatedAt: new Date().toISOString(),
+  });
+  return cleanName;
+}
+
+/**
+ * Xóa thư mục bài học khỏi Firestore
+ */
+export async function deleteLessonFolder(folderId) {
+  if (!db) throw new Error('Chưa kết nối Firebase Firestore.');
+  await deleteDoc(doc(db, FOLDERS_COLLECTION, folderId));
+}
+
+/**
+ * Upload video bài giảng trực tiếp lên Google Drive cá nhân (My Drive\BeaconLearn\<Môn>\<Thư mục>\<file>)
+ * và lưu metadata vào Firestore
+ */
+export async function uploadDriveVideoLesson({
+  subject,
+  folderId,
+  folderName,
+  title,
+  file,
+  uploadedBy,
+  clientId = '',
+  onProgress,
+}) {
+  if (!db) {
+    throw new Error('Chưa cấu hình Firebase Firestore.');
+  }
+
+  const driveResult = await uploadVideoToGoogleDrive({
+    file,
+    title,
+    subject,
+    folderName,
+    clientId,
+    onProgress,
+  });
+
+  const lessonId = `lesson-${Date.now()}`;
+  const lessonData = {
+    id: lessonId,
+    subjectId: subject.id,
+    subjectName: subject.name,
+    category: 'video',
+    folderId,
+    folderName,
+    title: title?.trim() || driveResult.fileName,
+    fileName: driveResult.fileName,
+    fileType: 'video',
+    mimeType: file.type || 'video/mp4',
+    size: file.size || 0,
+    url: driveResult.embedUrl,
+    webViewLink: driveResult.webViewLink,
+    driveFileId: driveResult.driveFileId,
+    driveFolderId: driveResult.driveFolderId,
+    drivePath: driveResult.drivePath,
+    storageType: 'google_drive',
+    uploadedBy: uploadedBy || 'admin',
+    createdAt: new Date().toISOString(),
+  };
+
+  await setDoc(doc(db, LESSONS_COLLECTION, lessonId), lessonData);
+  return lessonData;
+}
+
+/**
+ * Xóa một bài học khỏi Firestore và Firebase Storage / Google Drive (Chỉ dành cho Admin)
  */
 export async function deleteSubjectLesson(lesson) {
   if (!db) {
@@ -226,6 +363,10 @@ export async function deleteSubjectLesson(lesson) {
   }
 
   await deleteDoc(doc(db, LESSONS_COLLECTION, lesson.id));
+
+  if (lesson.storageType === 'google_drive' && lesson.driveFileId) {
+    await deleteFileFromGoogleDrive(lesson.driveFileId);
+  }
 
   if (storage && lesson.storagePath) {
     try {

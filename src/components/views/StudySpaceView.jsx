@@ -19,7 +19,11 @@ import {
   Network,
   ClipboardCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Folder,
+  FolderPlus,
+  Pencil,
+  ChevronRight
 } from 'lucide-react';
 import { STUDY_SUBJECTS } from '../../data/mockData';
 import { getSessionUser } from '../../services/authService';
@@ -28,10 +32,20 @@ import {
   saveUserNotes,
   fetchSubjectLessons,
   uploadSubjectLesson,
+  uploadDriveVideoLesson,
+  fetchLessonFolders,
+  createLessonFolder,
+  renameLessonFolder,
+  deleteLessonFolder,
   deleteSubjectLesson,
   fetchUserLessonProgress,
   saveUserLessonProgress
 } from '../../services/studyService';
+import {
+  getDriveSubjectFolderName,
+  getSavedGoogleClientId,
+  saveGoogleClientId
+} from '../../services/googleDriveService';
 
 const ICONS_MAP = {
   Calculator: Calculator,
@@ -113,6 +127,17 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const [activeCategory, setActiveCategory] = useState('video');
   const [activeLesson, setActiveLesson] = useState(null);
 
+  // Thư mục bài học (cho Video bài giảng)
+  const [folders, setFolders] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState(null);
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [editingFolderId, setEditingFolderId] = useState(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [folderError, setFolderError] = useState('');
+  const [googleClientId, setGoogleClientId] = useState(() => getSavedGoogleClientId());
+
   // Admin Upload state
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
@@ -133,10 +158,11 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     async function loadInitialData() {
       setIsLoadingLessons(true);
       try {
-        const [notes, lessons, progress] = await Promise.all([
+        const [notes, lessons, progress, loadedFolders] = await Promise.all([
           fetchUserNotes(username),
           fetchSubjectLessons(),
           fetchUserLessonProgress(username),
+          fetchLessonFolders(),
         ]);
 
         if (!isCancelled) {
@@ -144,6 +170,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
           setHasUnsavedNotes(false);
           setAllLessons(lessons);
           setLessonProgress(progress || {});
+          setFolders(loadedFolders || []);
         }
       } catch (err) {
         console.error('Lỗi khi tải dữ liệu trang Bài học:', err);
@@ -188,11 +215,84 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const handleOpenSubject = (subject) => {
     setSelectedSubject(subject);
     setActiveCategory('video');
+    setSelectedFolder(null);
+    setShowNewFolderInput(false);
+    setNewFolderName('');
+    setFolderError('');
     setActiveLesson(null);
     setUploadTitle('');
     setUploadFile(null);
     setUploadError('');
     setUploadProgress(0);
+  };
+
+  // Admin: Tạo thư mục bài học (VD: "Bài học 1")
+  const handleCreateFolder = async (e) => {
+    e.preventDefault();
+    if (!isAdmin || !selectedSubject || isCreatingFolder) return;
+    const clean = newFolderName.trim();
+    if (!clean) return;
+
+    setFolderError('');
+    setIsCreatingFolder(true);
+    try {
+      const created = await createLessonFolder({
+        subjectId: selectedSubject.id,
+        subjectName: selectedSubject.name,
+        category: 'video',
+        name: clean,
+        createdBy: username,
+      });
+      setFolders((prev) => [...prev, created]);
+      setNewFolderName('');
+      setShowNewFolderInput(false);
+    } catch (err) {
+      setFolderError(err.message || 'Không thể tạo thư mục bài học.');
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
+
+  // Admin: Đổi tên thư mục bài học
+  const handleRenameFolder = async (folderId) => {
+    const clean = editingFolderName.trim();
+    if (!clean) {
+      setEditingFolderId(null);
+      return;
+    }
+    try {
+      await renameLessonFolder(folderId, clean);
+      setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, name: clean } : f)));
+      if (selectedFolder?.id === folderId) {
+        setSelectedFolder((prev) => (prev ? { ...prev, name: clean } : null));
+      }
+    } catch (err) {
+      alert(err.message || 'Không thể đổi tên thư mục.');
+    } finally {
+      setEditingFolderId(null);
+    }
+  };
+
+  // Admin: Xóa thư mục bài học
+  const handleDeleteFolder = async (folder, e) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    const folderVideos = allLessons.filter((l) => l.folderId === folder.id);
+    if (folderVideos.length > 0) {
+      alert('Vui lòng xóa các video bên trong thư mục trước khi xóa thư mục này.');
+      return;
+    }
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa thư mục "${folder.name}"?`)) return;
+
+    try {
+      await deleteLessonFolder(folder.id);
+      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+      if (selectedFolder?.id === folder.id) {
+        setSelectedFolder(null);
+      }
+    } catch (err) {
+      alert(err.message || 'Không thể xóa thư mục.');
+    }
   };
 
   // Mở thẳng video bài học từ mục "Bài Học Gần Đây"
@@ -218,25 +318,46 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     setActiveLesson(matchedLesson);
   };
 
-  // Admin: Upload file / video bài giảng vào thẻ môn học
+  // Admin: Upload file / video bài giảng vào thẻ môn học (Video trong thư mục tự động lưu lên Google Drive)
   const handleUploadLesson = async (e) => {
     e.preventDefault();
     if (!isAdmin || !selectedSubject || !uploadFile || isUploading) return;
+    if (activeCategory === 'video' && !selectedFolder) {
+      setUploadError('Vui lòng chọn hoặc tạo thư mục bài học trước khi đăng video.');
+      return;
+    }
 
     setUploadError('');
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
-      const created = await uploadSubjectLesson({
-        subjectId: selectedSubject.id,
-        subjectName: selectedSubject.name,
-        category: activeCategory,
-        title: uploadTitle,
-        file: uploadFile,
-        uploadedBy: username,
-        onProgress: (pct) => setUploadProgress(pct),
-      });
+      let created;
+      if (activeCategory === 'video') {
+        if (googleClientId) {
+          saveGoogleClientId(googleClientId);
+        }
+        created = await uploadDriveVideoLesson({
+          subject: selectedSubject,
+          folderId: selectedFolder.id,
+          folderName: selectedFolder.name,
+          title: uploadTitle,
+          file: uploadFile,
+          uploadedBy: username,
+          clientId: googleClientId,
+          onProgress: (pct) => setUploadProgress(pct),
+        });
+      } else {
+        created = await uploadSubjectLesson({
+          subjectId: selectedSubject.id,
+          subjectName: selectedSubject.name,
+          category: activeCategory,
+          title: uploadTitle,
+          file: uploadFile,
+          uploadedBy: username,
+          onProgress: (pct) => setUploadProgress(pct),
+        });
+      }
 
       setAllLessons((prev) => [created, ...prev]);
       setUploadTitle('');
@@ -342,6 +463,17 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     (l) => getLessonCategory(l) === activeCategory
   );
 
+  const subjectVideoFolders = selectedSubject
+    ? folders.filter((f) => f.subjectId === selectedSubject.id && (f.category || 'video') === 'video')
+    : [];
+
+  const driveSubjectName = getDriveSubjectFolderName(selectedSubject);
+
+  const displayedLessons =
+    activeCategory === 'video' && selectedFolder
+      ? currentTabLessons.filter((l) => l.folderId === selectedFolder.id)
+      : currentTabLessons;
+
   // ============================================================================
   // TRANG CHI TIẾT MÔN HỌC (KHI NHẤP VÀO THẺ MÔN HỌC)
   // ============================================================================
@@ -394,19 +526,29 @@ export default function StudySpaceView({ currentUser: propsUser }) {
             onContextMenu={(e) => e.preventDefault()}
           >
             {activeLesson.fileType === 'video' ? (
-              <video
-                ref={videoRef}
-                src={activeLesson.url}
-                controls
-                controlsList="nodownload"
-                disablePictureInPicture
-                onContextMenu={(e) => e.preventDefault()}
-                onLoadedMetadata={handleVideoLoadedMetadata}
-                onTimeUpdate={handleVideoTimeUpdate}
-                onPause={handleVideoPauseOrEnd}
-                onEnded={handleVideoPauseOrEnd}
-                className="w-full max-h-[75vh] bg-black outline-none"
-              />
+              activeLesson.storageType === 'google_drive' ? (
+                <iframe
+                  title={activeLesson.title}
+                  src={activeLesson.url}
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                  className="w-full h-[75vh] border-0 bg-black"
+                />
+              ) : (
+                <video
+                  ref={videoRef}
+                  src={activeLesson.url}
+                  controls
+                  controlsList="nodownload"
+                  disablePictureInPicture
+                  onContextMenu={(e) => e.preventDefault()}
+                  onLoadedMetadata={handleVideoLoadedMetadata}
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onPause={handleVideoPauseOrEnd}
+                  onEnded={handleVideoPauseOrEnd}
+                  className="w-full max-h-[75vh] bg-black outline-none"
+                />
+              )
             ) : activeLesson.fileType === 'image' ? (
               <div className="flex items-center justify-center p-4 bg-black/20">
                 <img
@@ -448,6 +590,9 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     type="button"
                     onClick={() => {
                       setActiveCategory(tab.id);
+                      setSelectedFolder(null);
+                      setShowNewFolderInput(false);
+                      setFolderError('');
                       setUploadTitle('');
                       setUploadFile(null);
                       setUploadError('');
@@ -488,93 +633,324 @@ export default function StudySpaceView({ currentUser: propsUser }) {
               })}
             </div>
 
-            {/* ADMIN ONLY: Form Upload theo từng tính năng con */}
-            {isAdmin && (
-              <form
-                onSubmit={handleUploadLesson}
-                className="p-4 rounded-2xl bg-white/[0.04] border border-purple-500/30 space-y-3"
-              >
-                <div className="flex items-center gap-2 text-xs font-bold text-purple-300 uppercase tracking-wider">
-                  <Upload className="w-4 h-4" />
-                  <span>{currentSubfeature.uploadLabel} (Quản trị viên)</span>
-                </div>
-
-                {uploadError && (
-                  <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs">
-                    {uploadError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    required
-                    placeholder={currentSubfeature.placeholder}
-                    value={uploadTitle}
-                    onChange={(e) => setUploadTitle(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                  />
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    required
-                    accept={currentSubfeature.accept}
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full px-3 py-1.5 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-100 file:text-indigo-800 dark:file:bg-purple-600/30 dark:file:text-purple-200 cursor-pointer"
-                  />
-                </div>
-
-                {isUploading && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] text-slate-300">
-                      <span>Đang tải lên Firebase Storage...</span>
-                      <span className="font-mono font-bold text-purple-300">{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-400 transition-all"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isUploading || !uploadFile}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Đang tải lên...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Đăng {currentSubfeature.label}</span>
-                      </>
+            {/* CẤP 1 CỦA VIDEO BÀI GIẢNG: DANH SÁCH THƯ MỤC BÀI HỌC */}
+            {activeCategory === 'video' && !selectedFolder ? (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-white font-display flex items-center gap-2">
+                      <Folder className="w-4 h-4 text-amber-400" />
+                      <span>Thư mục bài học ({subjectVideoFolders.length})</span>
+                    </h2>
+                    {isAdmin && (
+                      <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                        Đường dẫn Google Drive: My Drive\BeaconLearn\{driveSubjectName}\&lt;Tên thư mục&gt;
+                      </p>
                     )}
-                  </button>
-                </div>
-              </form>
-            )}
+                  </div>
 
-            {/* Danh sách nội dung trong tính năng con đang chọn */}
-            {isLoadingLessons ? (
-              <div className="py-10 text-center text-xs text-slate-400 space-y-2">
-                <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
-                <p>Đang tải nội dung môn học...</p>
-              </div>
-            ) : currentTabLessons.length === 0 ? (
-              <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
-                {currentSubfeature.emptyText} trong môn {selectedSubject.name}.
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewFolderInput((prev) => !prev);
+                        setFolderError('');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer self-start sm:self-auto"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      <span>Tạo thư mục bài học</span>
+                    </button>
+                  )}
+                </div>
+
+                {folderError && (
+                  <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs">
+                    {folderError}
+                  </div>
+                )}
+
+                {isAdmin && showNewFolderInput && (
+                  <form
+                    onSubmit={handleCreateFolder}
+                    className="p-3.5 rounded-2xl bg-white/[0.04] border border-purple-500/30 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
+                  >
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder="Nhập tên thư mục bài học (VD: Bài học 1)..."
+                      className="flex-1 px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                    />
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewFolderInput(false);
+                          setNewFolderName('');
+                        }}
+                        className="px-3 py-2 rounded-xl glass-button text-xs font-semibold cursor-pointer"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isCreatingFolder || !newFolderName.trim()}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
+                      >
+                        {isCreatingFolder ? 'Đang tạo...' : 'Tạo thư mục'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {isLoadingLessons ? (
+                  <div className="py-10 text-center text-xs text-slate-400 space-y-2">
+                    <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
+                    <p>Đang tải danh sách thư mục...</p>
+                  </div>
+                ) : subjectVideoFolders.length === 0 ? (
+                  <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
+                    {isAdmin
+                      ? `Chưa có thư mục bài học nào trong môn ${selectedSubject.name}. Nhấn "Tạo thư mục bài học" để bắt đầu.`
+                      : `Chưa có thư mục bài học nào trong môn ${selectedSubject.name}.`}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {subjectVideoFolders.map((folder) => {
+                      const videoCount = currentTabLessons.filter((l) => l.folderId === folder.id).length;
+                      const isEditingThis = editingFolderId === folder.id;
+
+                      return (
+                        <div
+                          key={folder.id}
+                          onClick={() => {
+                            if (!isEditingThis) {
+                              setSelectedFolder(folder);
+                              setUploadTitle('');
+                              setUploadFile(null);
+                              setUploadError('');
+                              setUploadProgress(0);
+                            }
+                          }}
+                          className="p-4 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 shrink-0">
+                              <Folder className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              {isEditingThis ? (
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={editingFolderName}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => setEditingFolderName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleRenameFolder(folder.id);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingFolderId(null);
+                                    }
+                                  }}
+                                  onBlur={() => handleRenameFolder(folder.id)}
+                                  className="w-full px-2 py-1 rounded-lg text-xs font-bold"
+                                />
+                              ) : (
+                                <h4 className="text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
+                                  {folder.name}
+                                </h4>
+                              )}
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                {videoCount} video bài giảng
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isAdmin && !isEditingThis && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingFolderId(folder.id);
+                                    setEditingFolderName(folder.name);
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  title="Đổi tên thư mục"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteFolder(folder, e)}
+                                  className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  title="Xóa thư mục"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-300" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {currentTabLessons.map((lesson) => {
+              <>
+                {/* Breadcrumb khi đang ở bên trong 1 thư mục Video bài giảng */}
+                {activeCategory === 'video' && selectedFolder && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl glass-card border border-white/10">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFolder(null);
+                          setUploadError('');
+                          setUploadProgress(0);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer shrink-0"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Thư mục</span>
+                      </button>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span className="text-xs sm:text-sm font-bold text-white truncate">
+                          {selectedFolder.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <span className="text-[11px] font-mono text-slate-400 truncate">
+                        My Drive\BeaconLearn\{driveSubjectName}\{selectedFolder.name}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* ADMIN ONLY: Form Upload theo từng tính năng con */}
+                {isAdmin && (
+                  <form
+                    onSubmit={handleUploadLesson}
+                    className="p-4 rounded-2xl bg-white/[0.04] border border-purple-500/30 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-purple-300 uppercase tracking-wider">
+                        <Upload className="w-4 h-4" />
+                        <span>
+                          {activeCategory === 'video' && selectedFolder
+                            ? `Tải video vào "${selectedFolder.name}" (Google Drive)`
+                            : `${currentSubfeature.uploadLabel} (Quản trị viên)`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {uploadError && (
+                      <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs">
+                        {uploadError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input
+                        type="text"
+                        required
+                        placeholder={currentSubfeature.placeholder}
+                        value={uploadTitle}
+                        onChange={(e) => setUploadTitle(e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                      />
+
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        required
+                        accept={currentSubfeature.accept}
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                        className="w-full px-3 py-1.5 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-100 file:text-indigo-800 dark:file:bg-purple-600/30 dark:file:text-purple-200 cursor-pointer"
+                      />
+                    </div>
+
+                    {activeCategory === 'video' && !import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                      <input
+                        type="text"
+                        value={googleClientId}
+                        onChange={(e) => {
+                          setGoogleClientId(e.target.value);
+                          saveGoogleClientId(e.target.value);
+                        }}
+                        placeholder="Google OAuth Client ID (chỉ nhập 1 lần nếu chưa đặt VITE_GOOGLE_CLIENT_ID trong .env)"
+                        className="w-full px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    )}
+
+                    {isUploading && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] text-slate-300">
+                          <span>
+                            {activeCategory === 'video' && selectedFolder
+                              ? `Đang tải lên My Drive\\BeaconLearn\\${driveSubjectName}\\${selectedFolder.name}...`
+                              : 'Đang tải lên Firebase Storage...'}
+                          </span>
+                          <span className="font-mono font-bold text-purple-300">{uploadProgress}%</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-indigo-400 transition-all"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={isUploading || !uploadFile}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Đang tải lên...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Đăng {currentSubfeature.label}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Danh sách nội dung trong tính năng con / thư mục đang chọn */}
+                {isLoadingLessons ? (
+                  <div className="py-10 text-center text-xs text-slate-400 space-y-2">
+                    <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
+                    <p>Đang tải nội dung môn học...</p>
+                  </div>
+                ) : displayedLessons.length === 0 ? (
+                  <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
+                    {activeCategory === 'video' && selectedFolder
+                      ? `Chưa có video bài giảng nào trong "${selectedFolder.name}".`
+                      : `${currentSubfeature.emptyText} trong môn ${selectedSubject.name}.`}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {displayedLessons.map((lesson) => {
                   const LessonIcon = getLessonIcon(lesson.fileType);
                   const savedProg = lessonProgress[lesson.id];
 
@@ -631,6 +1007,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                   );
                 })}
               </div>
+            )}
+              </>
             )}
           </div>
         )}
