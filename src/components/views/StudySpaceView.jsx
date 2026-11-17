@@ -23,7 +23,10 @@ import {
   Folder,
   FolderPlus,
   Pencil,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { STUDY_SUBJECTS } from '../../data/mockData';
 import { getSessionUser } from '../../services/authService';
@@ -139,6 +142,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const [folderError, setFolderError] = useState('');
   const [appsScriptUrl, setAppsScriptUrl] = useState(() => getSavedAppsScriptUrl());
   const [showScriptConfig, setShowScriptConfig] = useState(() => !getSavedAppsScriptUrl());
+  const [isTheaterMode, setIsTheaterMode] = useState(false);
 
   // Admin Upload state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -527,59 +531,209 @@ export default function StudySpaceView({ currentUser: propsUser }) {
         </div>
 
         {activeLesson ? (
-          /* FULL-PAGE IN-APP VIEWER (NO DOWNLOAD) */
-          <div
-            className="w-full rounded-2xl overflow-hidden border border-white/10 bg-black/40 select-none"
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {activeLesson.fileType === 'video' ? (
-              activeLesson.storageType === 'google_drive' ? (
+          activeLesson.fileType === 'video' ? (
+            /* YOUTUBE-STYLE ONLINE VIDEO WATCH VIEW */
+            (() => {
+              const playlist = currentTabLessons.filter((l) =>
+                activeLesson.folderId ? l.folderId === activeLesson.folderId : !l.folderId
+              );
+              const currentIdx = playlist.findIndex((l) => l.id === activeLesson.id);
+              const prevVideo = currentIdx > 0 ? playlist[currentIdx - 1] : null;
+              const nextVideo = currentIdx >= 0 && currentIdx < playlist.length - 1 ? playlist[currentIdx + 1] : null;
+              const driveEmbedSrc = activeLesson.driveFileId
+                ? `https://drive.google.com/file/d/${activeLesson.driveFileId}/preview`
+                : activeLesson.url;
+
+              return (
+                <div className={`grid grid-cols-1 gap-5 ${isTheaterMode ? '' : 'lg:grid-cols-3 items-start'}`}>
+                  {/* Cột Trình phát video chính */}
+                  <div className={isTheaterMode ? 'space-y-3' : 'lg:col-span-2 space-y-3'}>
+                    <div
+                      className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/15 bg-black shadow-2xl select-none"
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      {activeLesson.storageType === 'google_drive' ? (
+                        <>
+                          <iframe
+                            key={activeLesson.id}
+                            title={activeLesson.title}
+                            src={driveEmbedSrc}
+                            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full border-0 bg-black"
+                          />
+                          {/* Che góc pop-out của Drive để giữ trải nghiệm xem nội bộ như YouTube */}
+                          <div
+                            className="absolute top-0 right-0 w-14 h-14 z-10 bg-transparent"
+                            title="Trình phát video trực tuyến"
+                          />
+                        </>
+                      ) : (
+                        <video
+                          key={activeLesson.id}
+                          ref={videoRef}
+                          src={activeLesson.url}
+                          controls
+                          controlsList="nodownload"
+                          disablePictureInPicture
+                          onContextMenu={(e) => e.preventDefault()}
+                          onLoadedMetadata={handleVideoLoadedMetadata}
+                          onTimeUpdate={handleVideoTimeUpdate}
+                          onPause={handleVideoPauseOrEnd}
+                          onEnded={handleVideoPauseOrEnd}
+                          className="w-full h-full bg-black outline-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* Thanh thông tin & điều khiển dưới video giống YouTube */}
+                    <div className="p-4 rounded-2xl glass-card border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-base sm:text-lg font-bold font-display text-white truncate">
+                          {activeLesson.title}
+                        </h2>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-400/25 font-semibold">
+                            {selectedSubject.name}
+                          </span>
+                          {(activeLesson.folderName || selectedFolder?.name) && (
+                            <span className="inline-flex items-center gap-1 text-amber-300 font-medium">
+                              <Folder className="w-3.5 h-3.5" />
+                              {activeLesson.folderName || selectedFolder?.name}
+                            </span>
+                          )}
+                          <span>•</span>
+                          <span>Phát trực tuyến</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={!prevVideo}
+                          onClick={() => prevVideo && setActiveLesson(prevVideo)}
+                          className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                          title="Video trước"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <span>Trước</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!nextVideo}
+                          onClick={() => nextVideo && setActiveLesson(nextVideo)}
+                          className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                          title="Video tiếp theo"
+                        >
+                          <span>Tiếp theo</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsTheaterMode((prev) => !prev)}
+                          className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer"
+                          title={isTheaterMode ? 'Thu gọn trình phát' : 'Chế độ rạp chiếu phim'}
+                        >
+                          {isTheaterMode ? (
+                            <Minimize2 className="w-3.5 h-3.5" />
+                          ) : (
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isTheaterMode ? 'Mặc định' : 'Rạp phim'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Danh sách phát bên phải (Playlist giống YouTube) */}
+                  <div className="rounded-2xl glass-card border border-white/10 p-3.5 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Video className="w-4 h-4 text-purple-300 shrink-0" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 truncate">
+                          Danh sách phát {activeLesson.folderName ? `• ${activeLesson.folderName}` : ''}
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                        {currentIdx >= 0 ? `${currentIdx + 1}/${playlist.length}` : `${playlist.length} video`}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 max-h-[460px] overflow-y-auto pr-0.5">
+                      {playlist.map((item, idx) => {
+                        const isPlaying = item.id === activeLesson.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              hasSeekedRef.current = false;
+                              setActiveLesson(item);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center gap-3 cursor-pointer ${
+                              isPlaying
+                                ? 'bg-purple-600/25 border-purple-400/60 shadow-sm'
+                                : 'bg-white/[0.03] border-white/10 hover:border-white/25 hover:bg-white/[0.06]'
+                            }`}
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                isPlaying
+                                  ? 'bg-purple-500/30 text-purple-200'
+                                  : 'bg-white/[0.05] text-slate-400'
+                              }`}
+                            >
+                              <Play className={`w-3.5 h-3.5 ${isPlaying ? 'fill-current' : ''}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold text-white truncate">
+                                {idx + 1}. {item.title}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {isPlaying ? 'Đang phát' : 'Nhấn để xem'}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
+            /* FULL-PAGE IN-APP VIEWER FOR IMAGE / PDF / DOC (NO DOWNLOAD) */
+            <div
+              className="w-full rounded-2xl overflow-hidden border border-white/10 bg-black/40 select-none"
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              {activeLesson.fileType === 'image' ? (
+                <div className="flex items-center justify-center p-4 bg-black/20">
+                  <img
+                    src={activeLesson.url}
+                    alt={activeLesson.title}
+                    draggable={false}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="max-h-[75vh] w-auto object-contain rounded-xl pointer-events-none select-none"
+                  />
+                </div>
+              ) : activeLesson.fileType === 'pdf' ? (
                 <iframe
                   title={activeLesson.title}
-                  src={activeLesson.url}
-                  allow="autoplay; fullscreen"
-                  allowFullScreen
-                  className="w-full h-[75vh] border-0 bg-black"
+                  src={`${activeLesson.url}#toolbar=0&navpanes=0`}
+                  className="w-full h-[75vh] border-0 bg-white"
                 />
               ) : (
-                <video
-                  ref={videoRef}
-                  src={activeLesson.url}
-                  controls
-                  controlsList="nodownload"
-                  disablePictureInPicture
-                  onContextMenu={(e) => e.preventDefault()}
-                  onLoadedMetadata={handleVideoLoadedMetadata}
-                  onTimeUpdate={handleVideoTimeUpdate}
-                  onPause={handleVideoPauseOrEnd}
-                  onEnded={handleVideoPauseOrEnd}
-                  className="w-full max-h-[75vh] bg-black outline-none"
+                <iframe
+                  title={activeLesson.title}
+                  src={`https://docs.google.com/gview?url=${encodeURIComponent(activeLesson.url)}&embedded=true`}
+                  className="w-full h-[75vh] border-0 bg-white"
                 />
-              )
-            ) : activeLesson.fileType === 'image' ? (
-              <div className="flex items-center justify-center p-4 bg-black/20">
-                <img
-                  src={activeLesson.url}
-                  alt={activeLesson.title}
-                  draggable={false}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className="max-h-[75vh] w-auto object-contain rounded-xl pointer-events-none select-none"
-                />
-              </div>
-            ) : activeLesson.fileType === 'pdf' ? (
-              <iframe
-                title={activeLesson.title}
-                src={`${activeLesson.url}#toolbar=0&navpanes=0`}
-                className="w-full h-[75vh] border-0 bg-white"
-              />
-            ) : (
-              <iframe
-                title={activeLesson.title}
-                src={`https://docs.google.com/gview?url=${encodeURIComponent(activeLesson.url)}&embedded=true`}
-                className="w-full h-[75vh] border-0 bg-white"
-              />
-            )}
-          </div>
+              )}
+            </div>
+          )
         ) : (
           <div className="space-y-4">
             {/* 3 tính năng con của Bài học: Video bài giảng, Sơ đồ tư duy, Bài tập củng cố kiến thức */}
