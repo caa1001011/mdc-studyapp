@@ -504,10 +504,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
 
   const usesFolders = activeCategory === 'video' || activeCategory === 'mindmap';
 
-  const subjectFoldersCount = selectedSubject
-    ? folders.filter((f) => f.subjectId === selectedSubject.id).length
-    : 0;
-
   const subjectCategoryFolders = selectedSubject
     ? folders.filter((f) => f.subjectId === selectedSubject.id && (f.category || 'video') === activeCategory)
     : [];
@@ -557,7 +553,9 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                 <p className="text-[11px] text-slate-400">
                   {activeLesson
                     ? selectedSubject.name
-                    : `${subjectFoldersCount} bài học`}
+                    : usesFolders
+                    ? `${subjectCategoryFolders.length} bài học`
+                    : `${currentTabLessons.length} bài tập`}
                 </p>
               </div>
             </div>
