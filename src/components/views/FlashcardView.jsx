@@ -377,14 +377,18 @@ export default function FlashcardView({ currentUser: propsUser }) {
 
   return (
     <div className="space-y-5 pb-10">
-      {/* 1. Header & Actions (Gọn gàng trên 1 hàng) */}
+      {/* 1. Header & Actions (Hiển thị tên bộ thẻ đang chọn) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold font-display tracking-tight text-white">
-            Thẻ Ghi Nhớ Từ Vựng Tiếng Anh
+            {currentDeck ? currentDeck.title : 'Thẻ Ghi Nhớ Từ Vựng Tiếng Anh'}
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Học theo từng Unit Sách Giáo Khoa hoặc tự tạo bộ thẻ cá nhân
+            {currentDeck
+              ? [currentDeck.bookName || currentDeck.unit, currentDeck.grade, `${currentCards.length} thẻ`]
+                  .filter(Boolean)
+                  .join(' • ')
+              : 'Học theo từng Unit Sách Giáo Khoa hoặc tự tạo bộ thẻ cá nhân'}
           </p>
         </div>
 
@@ -399,35 +403,33 @@ export default function FlashcardView({ currentUser: propsUser }) {
         </div>
       </div>
 
-      {/* 2. Main Responsive Layout: Collapsible Deck List + Center Stage + Word List */}
+      {/* 2. Thanh mở rộng nằm ngang khi đang thu gọn danh sách bộ thẻ */}
+      {isDecksCollapsed && (
+        <div>
+          <button
+            type="button"
+            onClick={toggleDecksCollapsed}
+            className="inline-flex flex-row items-center gap-2.5 px-3.5 py-2 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 transition-all cursor-pointer group"
+            title="Mở rộng danh sách bộ thẻ"
+          >
+            <span className="p-1.5 rounded-xl bg-white/[0.05] group-hover:bg-purple-600/30 border border-white/10 text-purple-300 transition-colors">
+              <PanelLeftOpen className="w-4 h-4" />
+            </span>
+            <span className="text-xs font-bold text-slate-200 font-display">
+              Danh sách bộ thẻ
+            </span>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono">
+              {textbookDecks.length + personalDecks.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* 3. Main Responsive Layout: Collapsible Deck List + Center Stage + Word List */}
       <div className="flex flex-col lg:flex-row items-start gap-6">
-        {/* Left Column: Textbook Decks + Personal Decks (Collapsible & Scrollable) */}
-        <div
-          className={`w-full shrink-0 transition-all duration-300 ${
-            isDecksCollapsed ? 'lg:w-12' : 'lg:w-72'
-          }`}
-        >
-          {isDecksCollapsed ? (
-            <div className="flex lg:flex-col items-center justify-between lg:justify-start gap-2 p-2 rounded-2xl glass-card border border-white/10">
-              <button
-                type="button"
-                onClick={toggleDecksCollapsed}
-                className="p-2 rounded-xl bg-white/[0.05] hover:bg-purple-600/30 border border-white/10 text-purple-300 hover:text-white transition-all cursor-pointer"
-                title="Mở rộng danh sách bộ thẻ"
-              >
-                <PanelLeftOpen className="w-4 h-4" />
-              </button>
-              <span className="lg:hidden text-xs font-semibold text-slate-300 truncate">
-                Danh sách bộ thẻ ({textbookDecks.length + personalDecks.length})
-              </span>
-              <span
-                className="hidden lg:block text-[10px] font-bold text-purple-300 font-mono py-1"
-                title={`${textbookDecks.length + personalDecks.length} bộ thẻ`}
-              >
-                {textbookDecks.length + personalDecks.length}
-              </span>
-            </div>
-          ) : (
+        {/* Left Column: Textbook Decks + Personal Decks (Scrollable) */}
+        {!isDecksCollapsed && (
+          <div className="w-full lg:w-72 shrink-0 transition-all duration-300">
             <div className="rounded-2xl glass-card border border-white/10 p-3 space-y-3">
               {/* Header + Nút thu gọn */}
               <div className="flex items-center justify-between px-1 pb-2 border-b border-white/10">
@@ -571,8 +573,8 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Center Stage: 3D Flashcard (tự căn giữa & mở rộng đẹp khi thu gọn danh sách bộ thẻ) */}
         <div className="flex-1 min-w-0 w-full">
