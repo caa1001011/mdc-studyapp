@@ -26,7 +26,11 @@ import {
   ChevronRight,
   ChevronLeft,
   Maximize2,
-  Minimize2
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { STUDY_SUBJECTS } from '../../data/mockData';
 import { getSessionUser } from '../../services/authService';
@@ -72,9 +76,9 @@ const LESSON_SUBFEATURES = [
     id: 'mindmap',
     label: 'Sơ đồ tư duy',
     icon: Network,
-    accept: 'image/*,.pdf',
+    accept: '.png,.jpg,.jpeg,image/png,image/jpeg',
     placeholder: 'Tiêu đề sơ đồ tư duy...',
-    uploadLabel: 'Tải lên Sơ đồ tư duy',
+    uploadLabel: 'Tải lên Sơ đồ tư duy (.png, .jpg, .jpeg)',
     emptyText: 'Chưa có sơ đồ tư duy nào',
   },
   {
@@ -90,6 +94,22 @@ const LESSON_SUBFEATURES = [
 
 function getLessonCategory(lesson) {
   return lesson.category || (lesson.fileType === 'video' ? 'video' : 'exercise');
+}
+
+function getMindmapImageUrl(lesson) {
+  if (!lesson) return '';
+  if (lesson.storageType === 'google_drive' && lesson.driveFileId) {
+    return `https://lh3.googleusercontent.com/d/${lesson.driveFileId}=w2000`;
+  }
+  return lesson.url || '';
+}
+
+function getMindmapFallbackUrl(lesson) {
+  if (!lesson) return '';
+  if (lesson.storageType === 'google_drive' && lesson.driveFileId) {
+    return `https://drive.google.com/thumbnail?id=${lesson.driveFileId}&sz=w2000`;
+  }
+  return lesson.url || '';
 }
 
 function formatDuration(seconds) {
@@ -143,6 +163,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const [appsScriptUrl, setAppsScriptUrl] = useState(() => getSavedAppsScriptUrl());
   const [showScriptConfig, setShowScriptConfig] = useState(() => !getSavedAppsScriptUrl());
   const [isTheaterMode, setIsTheaterMode] = useState(false);
+  const [zoomedMindmap, setZoomedMindmap] = useState(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
   // Admin Upload state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -336,6 +358,10 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     const isFolderCategory = activeCategory === 'video' || activeCategory === 'mindmap';
     if (isFolderCategory && !selectedFolder) {
       setUploadError('Vui lòng chọn hoặc tạo thư mục bài học trước khi tải lên.');
+      return;
+    }
+    if (activeCategory === 'mindmap' && !/\.(png|jpe?g)$/i.test(uploadFile.name || '') && !/^image\/(png|jpeg)$/i.test(uploadFile.type || '')) {
+      setUploadError('Sơ đồ tư duy chỉ hỗ trợ 1 tệp hình ảnh (.png, .jpg, .jpeg).');
       return;
     }
 
@@ -1028,8 +1054,8 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                   </div>
                 )}
 
-                {/* ADMIN ONLY: Form Upload theo từng tính năng con */}
-                {isAdmin && (
+                {/* ADMIN ONLY: Form Upload (Với Sơ đồ tư duy: chỉ hiện khi thư mục chưa có hình) */}
+                {isAdmin && !(activeCategory === 'mindmap' && selectedFolder && displayedLessons.length > 0) && (
                   <form
                     onSubmit={handleUploadLesson}
                     className="p-4 rounded-2xl bg-white/[0.04] border border-purple-500/30 space-y-3"
@@ -1137,6 +1163,73 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       ? `Chưa có ${currentSubfeature.label.toLowerCase()} nào trong "${selectedFolder.name}".`
                       : `${currentSubfeature.emptyText} trong môn ${selectedSubject.name}.`}
                   </div>
+                ) : activeCategory === 'mindmap' && selectedFolder ? (
+                  /* SƠ ĐỒ TƯ DUY: HIỂN THỊ TRỰC TIẾP 1 HÌNH ẢNH + BẤM ĐỂ PHÓNG TO */
+                  (() => {
+                    const mindmapLesson = displayedLessons[0];
+                    const imgSrc = getMindmapImageUrl(mindmapLesson);
+                    const fallbackSrc = getMindmapFallbackUrl(mindmapLesson);
+
+                    return (
+                      <div className="rounded-2xl glass-card border border-white/10 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-white truncate">
+                              {mindmapLesson.title}
+                            </h4>
+                            <p className="text-[11px] text-slate-400">
+                              Nhấn vào hình bên dưới để phóng to
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setZoomScale(1);
+                                setZoomedMindmap(mindmapLesson);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer"
+                            >
+                              <ZoomIn className="w-3.5 h-3.5" />
+                              <span>Phóng to</span>
+                            </button>
+
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteLesson(mindmapLesson)}
+                                className="p-1.5 rounded-xl glass-button text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                                title="Xóa sơ đồ tư duy"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div
+                          onClick={() => {
+                            setZoomScale(1);
+                            setZoomedMindmap(mindmapLesson);
+                          }}
+                          className="p-4 flex items-center justify-center bg-slate-100/80 dark:bg-black/30 cursor-zoom-in group"
+                          title="Nhấn để phóng to sơ đồ tư duy"
+                        >
+                          <img
+                            src={imgSrc}
+                            alt={mindmapLesson.title}
+                            onError={(e) => {
+                              if (fallbackSrc && e.currentTarget.src !== fallbackSrc) {
+                                e.currentTarget.src = fallbackSrc;
+                              }
+                            }}
+                            className="max-h-[70vh] w-auto object-contain rounded-xl shadow-lg transition-transform duration-200 group-hover:scale-[1.01]"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {displayedLessons.map((lesson) => {
@@ -1199,6 +1292,79 @@ export default function StudySpaceView({ currentUser: propsUser }) {
             )}
               </>
             )}
+          </div>
+        )}
+
+        {/* MODAL PHÓNG TO SƠ ĐỒ TƯ DUY */}
+        {zoomedMindmap && (
+          <div
+            onClick={() => setZoomedMindmap(null)}
+            className="dark-surface fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-md p-4 select-none"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-between gap-3 pb-3 text-white"
+            >
+              <h3 className="text-sm sm:text-base font-bold truncate">
+                {zoomedMindmap.title}
+              </h3>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((s) => Math.max(0.5, Number((s - 0.25).toFixed(2))))}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                  title="Thu nhỏ"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="text-xs font-mono px-2 min-w-[52px] text-center">
+                  {Math.round(zoomScale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((s) => Math.min(3, Number((s + 0.25).toFixed(2))))}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                  title="Phóng to thêm"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale(1)}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                  title="Mặc định 100%"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomedMindmap(null)}
+                  className="p-2 rounded-xl bg-rose-500/80 hover:bg-rose-500 text-white cursor-pointer"
+                  title="Đóng"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 overflow-auto flex items-center justify-center"
+            >
+              <img
+                src={getMindmapImageUrl(zoomedMindmap)}
+                alt={zoomedMindmap.title}
+                onError={(e) => {
+                  const fb = getMindmapFallbackUrl(zoomedMindmap);
+                  if (fb && e.currentTarget.src !== fb) {
+                    e.currentTarget.src = fb;
+                  }
+                }}
+                style={{ transform: `scale(${zoomScale})`, transformOrigin: 'center center' }}
+                className="max-h-[85vh] max-w-full object-contain rounded-xl transition-transform duration-150"
+              />
+            </div>
           </div>
         )}
       </div>
