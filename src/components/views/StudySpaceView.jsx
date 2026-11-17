@@ -168,6 +168,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const [zoomedMindmap, setZoomedMindmap] = useState(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [recentLessons, setRecentLessons] = useState([]);
+  const [useDrivePreviewFallback, setUseDrivePreviewFallback] = useState(false);
 
   // Admin Upload state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -369,6 +370,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const handleOpenLesson = (lesson) => {
     if (!lesson) return;
     hasSeekedRef.current = false;
+    setUseDrivePreviewFallback(false);
     setActiveLesson(lesson);
     trackRecentAccess({
       id: lesson.id,
@@ -660,7 +662,23 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                       className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/15 bg-black shadow-2xl select-none"
                       onContextMenu={(e) => e.preventDefault()}
                     >
-                      {activeLesson.storageType === 'google_drive' ? (
+                      {activeLesson.storageType === 'google_drive' && isVideoLesson && !useDrivePreviewFallback && activeLesson.driveFileId ? (
+                        <video
+                          key={`${activeLesson.id}-direct`}
+                          ref={videoRef}
+                          src={`https://drive.usercontent.google.com/download?id=${activeLesson.driveFileId}&export=view&confirm=t`}
+                          controls
+                          controlsList="nodownload"
+                          disablePictureInPicture
+                          onContextMenu={(e) => e.preventDefault()}
+                          onLoadedMetadata={handleVideoLoadedMetadata}
+                          onTimeUpdate={handleVideoTimeUpdate}
+                          onPause={handleVideoPauseOrEnd}
+                          onEnded={handleVideoPauseOrEnd}
+                          onError={() => setUseDrivePreviewFallback(true)}
+                          className="w-full h-full bg-black outline-none"
+                        />
+                      ) : activeLesson.storageType === 'google_drive' ? (
                         <>
                           <iframe
                             key={activeLesson.id}
@@ -731,11 +749,21 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {activeLesson.storageType === 'google_drive' && isVideoLesson && activeLesson.driveFileId && (
+                          <button
+                            type="button"
+                            onClick={() => setUseDrivePreviewFallback((prev) => !prev)}
+                            className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer"
+                            title="Chuyển chế độ phát video nếu gặp lỗi xử lý"
+                          >
+                            {useDrivePreviewFallback ? 'Phát trực tiếp' : 'Trình phát Drive'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={!prevItem}
-                          onClick={() => prevItem && setActiveLesson(prevItem)}
+                          onClick={() => prevItem && handleOpenLesson(prevItem)}
                           className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
                           title="Bài trước"
                         >
@@ -746,7 +774,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         <button
                           type="button"
                           disabled={!nextItem}
-                          onClick={() => nextItem && setActiveLesson(nextItem)}
+                          onClick={() => nextItem && handleOpenLesson(nextItem)}
                           className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
                           title="Tiếp theo"
                         >
