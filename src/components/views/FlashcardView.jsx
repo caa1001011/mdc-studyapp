@@ -757,49 +757,23 @@ export default function FlashcardView({ currentUser: propsUser }) {
           {/* Phần 3 (chỉ hiển thị cho tài khoản người dùng/học): Bộ thẻ cá nhân */}
           {!isAdmin && (
             <section className="space-y-3.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="p-2 rounded-xl border bg-cyan-500/15 border-cyan-400/30 text-cyan-300 shrink-0">
-                    <Layers className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
-                        Bộ thẻ cá nhân
-                      </h2>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
-                        {personalDecks.length}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 truncate">
-                      Lưu trữ riêng tất cả bộ thẻ do tài khoản @{username} tự tạo
-                    </p>
-                  </div>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl border bg-cyan-500/15 border-cyan-400/30 text-cyan-300 shrink-0">
+                  <Layers className="w-4 h-4" />
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => openCreateModal('personal')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer self-start sm:self-auto shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Tạo bộ thẻ mới</span>
-                </button>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
+                    Bộ thẻ cá nhân
+                  </h2>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 shrink-0">
+                    {personalDecks.length}
+                  </span>
+                </div>
               </div>
 
               {personalDecks.length === 0 ? (
-                <div className="p-6 rounded-2xl border border-dashed border-white/10 text-center space-y-2.5">
-                  <p className="text-xs sm:text-sm text-slate-400">
-                    Bạn chưa có bộ thẻ cá nhân nào. Tạo bằng cách nhập thủ công hoặc đưa tệp PDF / TXT để AI tạo.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => openCreateModal('personal')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Tạo Bộ Thẻ Mới</span>
-                  </button>
+                <div className="p-5 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-400">
+                  Chưa có bộ thẻ cá nhân nào.
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
