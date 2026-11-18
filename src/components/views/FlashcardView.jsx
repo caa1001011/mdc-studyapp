@@ -16,7 +16,9 @@ import {
   Save,
   Image as ImageIcon,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ArrowLeft,
+  FolderPlus
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
@@ -24,6 +26,9 @@ import {
   fetchTextbookDecks,
   saveTextbookDeck,
   deleteTextbookDeck,
+  fetchFlashcardBooks,
+  saveFlashcardBook,
+  deleteFlashcardBook,
   fetchUserFlashcardDecks,
   saveUserFlashcardDeck,
   deleteUserFlashcardDeck,
@@ -47,12 +52,18 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const username = currentUser?.username || 'student';
   const isAdmin = currentUser?.role === 'admin';
 
-  // Danh sách bộ thẻ: Sách giáo khoa (Admin cấp) & Bộ thẻ cá nhân (Người học tự tạo)
+  // Danh sách bộ thẻ & đầu sách: Global Success, Mở rộng, và Bộ thẻ cá nhân
   const [textbookDecks, setTextbookDecks] = useState([]);
+  const [flashcardBooks, setFlashcardBooks] = useState([]);
   const [personalDecks, setPersonalDecks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Bộ thẻ đang chọn học
+  // Admin thêm sách mới cho Global Success / Mở rộng
+  const [addingBookCategory, setAddingBookCategory] = useState(null); // 'global_success' | 'extended' | null
+  const [newBookName, setNewBookName] = useState('');
+  const [isSavingBook, setIsSavingBook] = useState(false);
+
+  // Bộ thẻ đang chọn học (null = trang danh sách 3 phần)
   const [selectedDeckId, setSelectedDeckId] = useState(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -60,9 +71,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [reviewCount, setReviewCount] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
 
-  // Modal tạo bộ thẻ (Dùng cho cả Người học tạo bộ cá nhân & Admin tạo bộ SGK)
+  // Modal tạo bộ thẻ (Admin tạo trong sách Global Success / Mở rộng, Học sinh tạo Bộ thẻ cá nhân)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState('personal'); // 'personal' | 'textbook'
+  const [bookCategory, setBookCategory] = useState('global_success'); // 'global_success' | 'extended'
   const [createMethod, setCreateMethod] = useState('manual'); // 'manual' | 'ai'
   const [deckTitle, setDeckTitle] = useState('');
   const [bookName, setBookName] = useState('');
@@ -76,6 +88,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [docFile, setDocFile] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiPreviewReady, setAiPreviewReady] = useState(false);
   const [modalError, setModalError] = useState('');
   const [isSavingDeck, setIsSavingDeck] = useState(false);
   const [isDecksCollapsed, setIsDecksCollapsed] = useState(() => {
@@ -97,23 +110,17 @@ export default function FlashcardView({ currentUser: propsUser }) {
     async function loadDecks() {
       setIsLoading(true);
       try {
-        const [tbDecks, myDecks] = await Promise.all([
+        const [tbDecks, books, myDecks] = await Promise.all([
           fetchTextbookDecks(),
+          fetchFlashcardBooks(),
           fetchUserFlashcardDecks(username),
         ]);
 
         if (!isCancelled) {
           setTextbookDecks(tbDecks);
+          setFlashcardBooks(books);
           setPersonalDecks(myDecks);
-
-          // Mặc định ưu tiên chọn bộ Sách giáo khoa đầu tiên khi người học mới vào
-          if (tbDecks.length > 0) {
-            setSelectedDeckId(tbDecks[0].id);
-          } else if (myDecks.length > 0) {
-            setSelectedDeckId(myDecks[0].id);
-          } else {
-            setSelectedDeckId(null);
-          }
+          setSelectedDeckId(null);
         }
       } catch (err) {
         console.error('Lỗi tải dữ liệu Flashcard:', err);
@@ -203,18 +210,48 @@ export default function FlashcardView({ currentUser: propsUser }) {
   }, [isCreateModalOpen, isFinished, currentCard, handleNext]);
 
   // Mở Modal Tạo Bộ Thẻ
-  const openCreateModal = (target) => {
+  const openCreateModal = (target, options = {}) => {
     setCreateTarget(target);
+    setBookCategory(options.category || 'global_success');
     setCreateMethod('manual');
     setDeckTitle('');
-    setBookName('');
-    setGrade('');
+    setBookName(options.bookName || '');
+    setGrade(options.grade || '');
     setCoverImage('');
     setDraftCards([EMPTY_CARD()]);
     setDocText('');
     setDocFile(null);
+    setAiPreviewReady(false);
     setModalError('');
     setIsCreateModalOpen(true);
+  };
+
+  // Admin: Thêm sách mới vào Global Success hoặc Mở rộng
+  const handleAddBook = async (e) => {
+    e.preventDefault();
+    if (!isAdmin || !addingBookCategory || !newBookName.trim() || isSavingBook) return;
+    setIsSavingBook(true);
+    try {
+      const saved = await saveFlashcardBook({
+        name: newBookName,
+        category: addingBookCategory,
+        createdBy: username,
+      });
+      setFlashcardBooks((prev) => [...prev, saved]);
+      setNewBookName('');
+      setAddingBookCategory(null);
+    } catch (err) {
+      alert(err.message || 'Không thể thêm đầu sách.');
+    } finally {
+      setIsSavingBook(false);
+    }
+  };
+
+  const handleDeleteBook = async (book, deckCount) => {
+    if (!isAdmin || deckCount > 0) return;
+    if (!window.confirm(`Xóa đầu sách "${book.name}"?`)) return;
+    await deleteFlashcardBook(book.id);
+    setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
   };
 
   // Tải & nén ảnh bìa sách (dành cho Admin)
@@ -280,6 +317,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
         geminiApiKey
       );
       setDraftCards(generated);
+      setAiPreviewReady(true);
     } catch (err) {
       setModalError(err.message || 'Không thể tạo thẻ từ tài liệu.');
     } finally {
@@ -323,6 +361,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
         const saved = await saveTextbookDeck({
           title: deckTitle,
           bookName,
+          category: bookCategory,
           grade,
           coverImage,
           cards: validCards,
@@ -375,25 +414,263 @@ export default function FlashcardView({ currentUser: propsUser }) {
     }
   };
 
+  const getCategoryBooks = (category) => {
+    const categoryDecks = textbookDecks.filter(
+      (d) => (d.category || 'global_success') === category
+    );
+    const bookMap = new Map();
+
+    flashcardBooks
+      .filter((b) => (b.category || 'global_success') === category)
+      .forEach((b) => {
+        const key = b.name.trim().toLowerCase();
+        if (!bookMap.has(key)) {
+          bookMap.set(key, { ...b, decks: [] });
+        }
+      });
+
+    categoryDecks.forEach((deck) => {
+      const name = (deck.bookName || (category === 'global_success' ? 'Global Success' : 'Tài liệu mở rộng')).trim();
+      const key = name.toLowerCase();
+      if (!bookMap.has(key)) {
+        bookMap.set(key, { id: `auto-${category}-${key}`, name, category, decks: [] });
+      }
+      bookMap.get(key).decks.push(deck);
+    });
+
+    return Array.from(bookMap.values());
+  };
+
+  const globalSuccessBooks = getCategoryBooks('global_success');
+  const extendedBooks = getCategoryBooks('extended');
+
+  const renderLibrarySection = ({
+    title,
+    subtitle,
+    icon: SectionIcon,
+    accentClass,
+    category,
+    books,
+    emptyBookHint,
+    addUnitLabel,
+  }) => (
+    <section className="space-y-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`p-2 rounded-xl border shrink-0 ${accentClass}`}>
+            <SectionIcon className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
+              {title}
+            </h2>
+            <p className="text-xs text-slate-400 truncate">{subtitle}</p>
+          </div>
+        </div>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => {
+              setAddingBookCategory((prev) => (prev === category ? null : category));
+              setNewBookName('');
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+            <span>Thêm sách</span>
+          </button>
+        )}
+      </div>
+
+      {isAdmin && addingBookCategory === category && (
+        <form
+          onSubmit={handleAddBook}
+          className="p-3 rounded-2xl glass-card border border-purple-500/30 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+        >
+          <input
+            type="text"
+            required
+            value={newBookName}
+            onChange={(e) => setNewBookName(e.target.value)}
+            placeholder={
+              category === 'global_success'
+                ? 'Tên sách (VD: Global Success 10, Global Success 12...)'
+                : 'Tên sách mở rộng (VD: IELTS Vocabulary, 3000 từ Oxford...)'
+            }
+            className="flex-1 px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+          />
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setAddingBookCategory(null)}
+              className="px-3 py-2 rounded-xl glass-button text-xs font-semibold text-slate-300 cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingBook || !newBookName.trim()}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
+            >
+              {isSavingBook ? 'Đang lưu...' : 'Lưu sách'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {isLoading ? (
+        <div className="p-6 rounded-2xl glass-card border border-white/10 text-center text-xs text-slate-400">
+          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1.5 text-purple-400" />
+          Đang tải danh sách bộ thẻ...
+        </div>
+      ) : books.length === 0 ? (
+        <div className="p-5 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-400">
+          {emptyBookHint}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {books.map((book) => (
+            <div
+              key={book.id}
+              className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <BookOpen className="w-4 h-4 text-amber-300 shrink-0" />
+                  <h3 className="text-sm font-bold font-display text-white truncate">
+                    {book.name}
+                  </h3>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-300 shrink-0">
+                    {book.decks.length} bộ thẻ
+                  </span>
+                </div>
+
+                {isAdmin && book.decks.length === 0 && !String(book.id).startsWith('book-gs-') && !String(book.id).startsWith('auto-') && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBook(book, book.decks.length)}
+                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 cursor-pointer shrink-0"
+                    title="Xóa đầu sách trống"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {book.decks.map((deck) => (
+                  <div
+                    key={deck.id}
+                    onClick={() => handleSelectDeck(deck.id)}
+                    className="relative p-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-400/50 hover:bg-purple-500/10 cursor-pointer transition-all flex flex-col justify-between gap-2.5 min-h-[124px] group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      {deck.coverImage ? (
+                        <img
+                          src={deck.coverImage}
+                          alt={deck.title}
+                          className="w-9 h-11 rounded-lg object-cover border border-white/15 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-11 rounded-lg bg-purple-500/15 border border-purple-400/25 flex items-center justify-center shrink-0 text-purple-300">
+                          <Layers className="w-4 h-4" />
+                        </div>
+                      )}
+
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteDeck(deck, e)}
+                          className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          title="Xóa bộ thẻ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 group-hover:text-purple-300 transition-colors font-display">
+                        {deck.title}
+                      </h4>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                        <span>{deck.cards?.length || 0} thẻ</span>
+                        <span className="text-purple-300 font-semibold">Học →</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Admin: Khung vuông dấu + ngay dưới tên sách */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openCreateModal('textbook', {
+                        category,
+                        bookName: book.name,
+                      })
+                    }
+                    className="aspect-square min-h-[124px] rounded-2xl border-2 border-dashed border-purple-400/35 hover:border-purple-400 bg-purple-500/[0.04] hover:bg-purple-500/10 flex flex-col items-center justify-center gap-2 p-3 transition-all cursor-pointer group"
+                    title={`${addUnitLabel} cho ${book.name}`}
+                  >
+                    <span className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-400/30 text-purple-300 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Plus className="w-5 h-5" />
+                    </span>
+                    <span className="text-xs font-bold text-purple-300 text-center">
+                      {addUnitLabel}
+                    </span>
+                  </button>
+                )}
+
+                {!isAdmin && book.decks.length === 0 && (
+                  <div className="col-span-full py-4 text-center text-xs text-slate-400">
+                    Chưa có bài học nào trong sách "{book.name}".
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
   return (
-    <div className="space-y-3.5 pb-8">
-      {/* 1. Header & Actions gọn gàng trên cùng một hàng */}
+    <div className="space-y-5 pb-10">
+      {/* 1. Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-extrabold font-display tracking-tight text-white truncate">
-            {currentDeck ? currentDeck.title : 'Thẻ Ghi Nhớ Từ Vựng Tiếng Anh'}
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5 truncate">
-            {currentDeck
-              ? [currentDeck.bookName || currentDeck.unit, currentDeck.grade, `${currentCards.length} thẻ`]
-                  .filter(Boolean)
-                  .join(' • ')
-              : 'Học theo từng Unit Sách Giáo Khoa hoặc tự tạo bộ thẻ cá nhân'}
-          </p>
+        <div className="flex items-center gap-3 min-w-0">
+          {currentDeck && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDeckId(null);
+                handleRestart();
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl glass-button text-xs font-semibold text-slate-200 hover:text-white cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Danh sách</span>
+            </button>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-extrabold font-display tracking-tight text-white truncate">
+              {currentDeck ? currentDeck.title : 'Thẻ Ghi Nhớ Từ Vựng Tiếng Anh'}
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5 truncate">
+              {currentDeck
+                ? [currentDeck.bookName || currentDeck.unit, currentDeck.grade, `${currentCards.length} thẻ`]
+                    .filter(Boolean)
+                    .join(' • ')
+                : 'Bộ sách giáo khoa Global Success, tài liệu mở rộng và bộ thẻ cá nhân'}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-          {isDecksCollapsed && (
+          {currentDeck && isDecksCollapsed && (
             <button
               type="button"
               onClick={toggleDecksCollapsed}
@@ -410,7 +687,8 @@ export default function FlashcardView({ currentUser: propsUser }) {
             </button>
           )}
           <button
-            onClick={() => openCreateModal(isAdmin ? 'textbook' : 'personal')}
+            type="button"
+            onClick={() => openCreateModal('personal')}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/25 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -419,7 +697,124 @@ export default function FlashcardView({ currentUser: propsUser }) {
         </div>
       </div>
 
-      {/* 2. Main Responsive Layout: Collapsible Deck List + Center Stage + Word List */}
+      {/* 2A. TRANG TỔNG QUAN 3 PHẦN (KHI CHƯA CHỌN BỘ THẺ) */}
+      {!currentDeck ? (
+        <div className="space-y-7">
+          {/* Phần 1 (trên): Bộ sách giáo khoa Global Success */}
+          {renderLibrarySection({
+            title: 'Bộ sách giáo khoa Global Success',
+            subtitle: isAdmin
+              ? 'Nhấn vào ô dấu + dưới mỗi cuốn sách để tạo bộ thẻ flashcard theo từng Unit'
+              : 'Chọn Unit trong bộ sách giáo khoa Global Success để học từ vựng',
+            icon: BookOpen,
+            accentClass: 'bg-amber-500/15 border-amber-400/30 text-amber-300',
+            category: 'global_success',
+            books: globalSuccessBooks,
+            emptyBookHint: 'Chưa có sách nào trong Bộ sách giáo khoa Global Success.',
+            addUnitLabel: 'Thêm Unit',
+          })}
+
+          {/* Phần 2 (dưới): Mở rộng */}
+          {renderLibrarySection({
+            title: 'Mở rộng',
+            subtitle: isAdmin
+              ? 'Nhấn vào ô dấu + dưới mỗi cuốn sách để tạo bộ thẻ flashcard mở rộng'
+              : 'Các bộ từ vựng mở rộng giúp nâng cao vốn từ Tiếng Anh',
+            icon: Sparkles,
+            accentClass: 'bg-indigo-500/15 border-indigo-400/30 text-indigo-300',
+            category: 'extended',
+            books: extendedBooks,
+            emptyBookHint: isAdmin
+              ? 'Chưa có sách mở rộng nào. Nhấn "Thêm sách" để tạo đầu sách mới.'
+              : 'Chưa có bộ thẻ mở rộng nào.',
+            addUnitLabel: 'Thêm bộ thẻ',
+          })}
+
+          {/* Phần 3: Bộ thẻ cá nhân */}
+          <section className="space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl border bg-cyan-500/15 border-cyan-400/30 text-cyan-300 shrink-0">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
+                      Bộ thẻ cá nhân
+                    </h2>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
+                      {personalDecks.length}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">
+                    Lưu trữ riêng tất cả bộ thẻ do tài khoản @{username} tự tạo
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => openCreateModal('personal')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer self-start sm:self-auto shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tạo bộ thẻ mới</span>
+              </button>
+            </div>
+
+            {personalDecks.length === 0 ? (
+              <div className="p-6 rounded-2xl border border-dashed border-white/10 text-center space-y-2.5">
+                <p className="text-xs sm:text-sm text-slate-400">
+                  Bạn chưa có bộ thẻ cá nhân nào. Tạo bằng cách nhập thủ công hoặc đưa tệp PDF / TXT để AI tạo.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openCreateModal('personal')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tạo Bộ Thẻ Mới</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {personalDecks.map((deck) => (
+                  <div
+                    key={deck.id}
+                    onClick={() => handleSelectDeck(deck.id)}
+                    className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-cyan-400/50 cursor-pointer transition-all flex flex-col justify-between gap-2.5 min-h-[116px] group"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
+                        {deck.creationMethod === 'ai' ? 'AI tạo' : 'Tự nhập'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteDeck(deck, e)}
+                        className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Xóa bộ thẻ cá nhân"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 group-hover:text-cyan-300 transition-colors font-display">
+                        {deck.title}
+                      </h4>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                        <span>{deck.cards?.length || 0} thẻ</span>
+                        <span className="text-cyan-300 font-semibold">Học →</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : (
+      /* 2B. CHẾ ĐỘ HỌC FLASHCARD (KHI ĐÃ CHỌN 1 BỘ THẺ) */
       <div className="flex flex-col lg:flex-row items-start gap-5">
         {/* Left Column: Textbook Decks + Personal Decks (Scrollable) */}
         {!isDecksCollapsed && (
@@ -812,6 +1207,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* 3. MODAL TẠO BỘ THẺ (NHẬP THỦ CÔNG HOẶC AI TẠO TỪ TÀI LIỆU) */}
       {isCreateModalOpen && (
@@ -822,11 +1218,15 @@ export default function FlashcardView({ currentUser: propsUser }) {
               <div>
                 <h3 className="text-lg font-bold font-display text-white">
                   {createTarget === 'textbook'
-                    ? 'Thêm Bộ Thẻ Sách Giáo Khoa (Admin)'
-                    : 'Tạo Bộ Thẻ Ghi Nhớ Cá Nhân'}
+                    ? bookCategory === 'extended'
+                      ? `Thêm Bộ Thẻ Mở Rộng • ${bookName || 'Mở rộng'}`
+                      : `Thêm Bộ Thẻ Unit • ${bookName || 'Global Success'}`
+                    : 'Tạo Bộ Thẻ Cá Nhân Mới'}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Tự đặt tên bộ thẻ và tạo từ vựng bằng cách nhập thủ công hoặc đưa tài liệu cho AI tạo
+                  {createTarget === 'textbook'
+                    ? 'Tạo bộ thẻ flashcard bằng cách nhập thủ công hoặc dùng AI tạo từ file PDF / TXT rồi xem trước'
+                    : 'Bộ thẻ sẽ được lưu riêng trong mục "Bộ thẻ cá nhân" của tài khoản bạn'}
                 </p>
               </div>
               <button
@@ -983,14 +1383,14 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
                       <Wand2 className="w-3.5 h-3.5" />
-                      Dán nội dung tài liệu hoặc tải tệp (.pdf, .doc, .docx, .txt, .md, .csv)
+                      Đưa file PDF / TXT hoặc dán nội dung để AI tạo thẻ xem trước
                     </span>
                     <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer">
                       <Upload className="w-3.5 h-3.5" />
-                      <span>Chọn Tệp Tài Liệu</span>
+                      <span>Chọn File PDF / TXT</span>
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.txt,.md,.csv,.rtf"
+                        accept=".pdf,.txt,.doc,.docx,.md,.csv,.rtf"
                         onChange={handleDocumentFileUpload}
                         className="hidden"
                       />
@@ -1044,11 +1444,19 @@ export default function FlashcardView({ currentUser: propsUser }) {
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>Tạo Danh Sách Thẻ</span>
+                          <span>AI Tạo Thẻ Xem Trước</span>
                         </>
                       )}
                     </button>
                   </div>
+                </div>
+              )}
+
+              {createMethod === 'ai' && aiPreviewReady && (
+                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-xs text-emerald-300 flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    ✓ AI đã tạo {draftCards.length} thẻ xem trước. Bạn có thể kiểm tra và chỉnh sửa từng thẻ bên dưới trước khi xuất!
+                  </span>
                 </div>
               )}
 
@@ -1152,7 +1560,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   ) : (
                     <>
                       <Save className="w-3.5 h-3.5" />
-                      <span>Lưu Bộ Thẻ</span>
+                      <span>{createMethod === 'ai' ? 'Xuất & Lưu Bộ Thẻ' : 'Lưu Bộ Thẻ'}</span>
                     </>
                   )}
                 </button>

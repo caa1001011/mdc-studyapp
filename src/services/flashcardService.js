@@ -11,6 +11,114 @@ import { db } from './firebase';
 
 const TEXTBOOK_DECKS_COLLECTION = 'textbook_flashcard_decks';
 const USER_DECKS_COLLECTION = 'user_flashcard_decks';
+const FLASHCARD_BOOKS_COLLECTION = 'flashcard_books';
+
+const DEFAULT_GLOBAL_SUCCESS_BOOKS = [
+  { id: 'book-gs-10', name: 'Global Success 10', category: 'global_success' },
+  { id: 'book-gs-11', name: 'Global Success 11', category: 'global_success' },
+  { id: 'book-gs-12', name: 'Global Success 12', category: 'global_success' },
+];
+
+/**
+ * Lấy danh sách đầu sách Flashcard (Global Success & Mở rộng)
+ */
+export async function fetchFlashcardBooks() {
+  let saved = [];
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, FLASHCARD_BOOKS_COLLECTION));
+      snap.forEach((docSnap) => {
+        saved.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      localStorage.setItem('lumina_flashcard_books', JSON.stringify(saved));
+    } catch (error) {
+      console.warn('Lỗi tải danh sách đầu sách Flashcard từ Firestore:', error);
+    }
+  }
+
+  if (saved.length === 0) {
+    try {
+      const raw = localStorage.getItem('lumina_flashcard_books');
+      if (raw) saved = JSON.parse(raw);
+    } catch {
+      saved = [];
+    }
+  }
+
+  // Đảm bảo luôn có sẵn bộ sách giáo khoa Global Success mặc định nếu chưa có
+  const merged = [...saved];
+  DEFAULT_GLOBAL_SUCCESS_BOOKS.forEach((def) => {
+    const exists = merged.some(
+      (b) => (b.category || 'global_success') === def.category && b.name?.toLowerCase() === def.name.toLowerCase()
+    );
+    if (!exists) {
+      merged.push(def);
+    }
+  });
+
+  return merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+}
+
+/**
+ * Admin: Thêm một đầu sách mới vào Global Success hoặc Mở rộng
+ */
+export async function saveFlashcardBook({ name, category = 'global_success', createdBy = 'admin' }) {
+  const cleanName = String(name || '').trim();
+  if (!cleanName) {
+    throw new Error('Vui lòng nhập tên sách.');
+  }
+
+  const bookId = `book-${category}-${Date.now()}`;
+  const bookData = {
+    id: bookId,
+    name: cleanName,
+    category,
+    createdBy,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (db) {
+    await setDoc(doc(db, FLASHCARD_BOOKS_COLLECTION, bookId), bookData, { merge: true });
+  }
+
+  try {
+    const raw = localStorage.getItem('lumina_flashcard_books');
+    const current = raw ? JSON.parse(raw) : [];
+    localStorage.setItem('lumina_flashcard_books', JSON.stringify([...current, bookData]));
+  } catch {
+    // ignore
+  }
+
+  return bookData;
+}
+
+/**
+ * Admin: Xóa đầu sách Flashcard
+ */
+export async function deleteFlashcardBook(bookId) {
+  if (db && !String(bookId).startsWith('book-gs-')) {
+    try {
+      await deleteDoc(doc(db, FLASHCARD_BOOKS_COLLECTION, bookId));
+    } catch (err) {
+      console.warn('Lỗi xóa đầu sách trên Firestore:', err);
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem('lumina_flashcard_books');
+    if (raw) {
+      const current = JSON.parse(raw);
+      localStorage.setItem(
+        'lumina_flashcard_books',
+        JSON.stringify(current.filter((b) => b.id !== bookId))
+      );
+    }
+  } catch {
+    // ignore
+  }
+
+  return true;
+}
 
 /**
  * Lấy danh sách bộ thẻ Sách Giáo Khoa (theo từng Unit do Admin cung cấp)
@@ -34,7 +142,16 @@ export async function fetchTextbookDecks() {
 /**
  * Admin: Tạo hoặc cập nhật một bộ thẻ Sách Giáo Khoa (theo Unit / Bài học)
  */
-export async function saveTextbookDeck({ id, title, bookName, grade, coverImage, cards, createdBy }) {
+export async function saveTextbookDeck({
+  id,
+  title,
+  bookName,
+  category = 'global_success',
+  grade,
+  coverImage,
+  cards,
+  createdBy,
+}) {
   if (!db) {
     throw new Error('Chưa kết nối Firebase Firestore.');
   }
@@ -44,6 +161,7 @@ export async function saveTextbookDeck({ id, title, bookName, grade, coverImage,
     id: deckId,
     title: title.trim(),
     bookName: bookName?.trim() || '',
+    category: category || 'global_success',
     grade: grade?.trim() || '',
     coverImage: coverImage || '',
     subject: 'Tiếng Anh',
