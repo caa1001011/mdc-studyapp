@@ -618,8 +618,9 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </div>
               </div>
 
-              {/* 3D Flip Card - Co giãn linh hoạt theo nội dung, không dùng glass-card để tránh :hover ghi đè rotate-y-180 */}
+              {/* 3D Flip Card - Co giãn linh hoạt theo nội dung, key theo từng thẻ để khi chuyển thẻ mới luôn hiện thẳng mặt câu hỏi, không lật ngược từ mặt đáp án */}
               <div
+                key={`${currentDeck.id}-${currentCard?.id || currentCardIndex}`}
                 className="perspective-1000 w-full cursor-pointer select-none"
                 onClick={handleFlip}
               >
