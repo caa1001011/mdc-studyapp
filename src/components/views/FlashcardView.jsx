@@ -99,6 +99,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [bookCategory, setBookCategory] = useState('global_success'); // 'global_success' | 'extended'
   const [createMethod, setCreateMethod] = useState('manual'); // 'manual' | 'ai'
   const [deckTitle, setDeckTitle] = useState('');
+  const [selectedBookIdForDeck, setSelectedBookIdForDeck] = useState('');
   const [bookName, setBookName] = useState('');
   const [grade, setGrade] = useState('');
   const [draftCards, setDraftCards] = useState([EMPTY_CARD()]);
@@ -242,6 +243,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setBookCategory(options.category || 'global_success');
     setCreateMethod('manual');
     setDeckTitle('');
+    setSelectedBookIdForDeck(options.bookId || '');
     setBookName(options.bookName || '');
     setGrade(options.grade || '');
     setDraftCards([EMPTY_CARD()]);
@@ -282,6 +284,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setBookCategory(deck.category || activeBookFolder?.category || 'global_success');
     setCreateMethod('manual');
     setDeckTitle(deck.title || '');
+    setSelectedBookIdForDeck(deck.bookId || activeBookFolder?.id || '');
     setBookName(deck.bookName || activeBookFolder?.name || '');
     setGrade(deck.grade || activeBookFolder?.grade || '');
     setDraftCards(
@@ -560,6 +563,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
         const saved = await saveTextbookDeck({
           id: editingTextbookDeck?.id,
           title: deckTitle,
+          bookId: selectedBookIdForDeck || activeBookFolder?.id || '',
           bookName,
           category: bookCategory,
           grade,
@@ -622,27 +626,50 @@ export default function FlashcardView({ currentUser: propsUser }) {
     const categoryDecks = textbookDecks.filter(
       (d) => (d.category || 'global_success') === category
     );
-    const bookMap = new Map();
-
-    flashcardBooks
+    const savedBooks = flashcardBooks
       .filter((b) => (b.category || 'global_success') === category)
-      .forEach((b) => {
-        const key = b.name.trim().toLowerCase();
-        if (!bookMap.has(key)) {
-          bookMap.set(key, { ...b, decks: [] });
-        }
-      });
+      .map((b) => ({ ...b, decks: [] }));
+
+    const bookById = new Map(savedBooks.map((b) => [b.id, b]));
+    const autoBooks = new Map();
 
     categoryDecks.forEach((deck) => {
-      const name = (deck.bookName || (category === 'global_success' ? 'Global Success' : 'Tài liệu mở rộng')).trim();
-      const key = name.toLowerCase();
-      if (!bookMap.has(key)) {
-        bookMap.set(key, { id: `auto-${category}-${key}`, name, category, decks: [] });
+      let targetBook = deck.bookId ? bookById.get(deck.bookId) : null;
+
+      if (!targetBook) {
+        const deckNameKey = (deck.bookName || '').trim().toLowerCase();
+        const deckGradeKey = (deck.grade || '').trim().toLowerCase();
+        targetBook =
+          savedBooks.find(
+            (b) =>
+              b.name.trim().toLowerCase() === deckNameKey &&
+              (b.grade || '').trim().toLowerCase() === deckGradeKey
+          ) ||
+          savedBooks.find((b) => b.name.trim().toLowerCase() === deckNameKey) ||
+          null;
       }
-      bookMap.get(key).decks.push(deck);
+
+      if (!targetBook) {
+        const name = (
+          deck.bookName || (category === 'global_success' ? 'Global Success' : 'Tài liệu mở rộng')
+        ).trim();
+        const autoKey = `${name.toLowerCase()}__${(deck.grade || '').trim().toLowerCase()}`;
+        if (!autoBooks.has(autoKey)) {
+          autoBooks.set(autoKey, {
+            id: `auto-${category}-${autoKey}`,
+            name,
+            grade: deck.grade || '',
+            category,
+            decks: [],
+          });
+        }
+        targetBook = autoBooks.get(autoKey);
+      }
+
+      targetBook.decks.push(deck);
     });
 
-    return Array.from(bookMap.values());
+    return [...savedBooks, ...Array.from(autoBooks.values())];
   };
 
   const globalSuccessBooks = getCategoryBooks('global_success');
@@ -1059,6 +1086,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   onClick={() =>
                     openCreateModal('textbook', {
                       category: activeBookFolder.category || 'global_success',
+                      bookId: !String(activeBookFolder.id).startsWith('auto-') ? activeBookFolder.id : '',
                       bookName: activeBookFolder.name,
                       grade: activeBookFolder.grade || '',
                     })
@@ -1150,11 +1178,18 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   (() => {
                     const currentBookName = (currentDeck?.bookName || activeBookFolder?.name || '').trim();
                     const currentCat = currentDeck?.category || activeBookFolder?.category || 'global_success';
-                    const scopedDecks = textbookDecks.filter(
-                      (d) =>
-                        (d.category || 'global_success') === currentCat &&
-                        (d.bookName || '').trim().toLowerCase() === currentBookName.toLowerCase()
-                    );
+                    const scopedDecks = activeBookFolder
+                      ? activeBookFolder.decks
+                      : textbookDecks.filter((d) => {
+                          if (currentDeck?.bookId && d.bookId) {
+                            return d.bookId === currentDeck.bookId;
+                          }
+                          return (
+                            (d.category || 'global_success') === currentCat &&
+                            (d.bookName || '').trim().toLowerCase() === currentBookName.toLowerCase() &&
+                            (d.grade || '').trim().toLowerCase() === (currentDeck?.grade || '').trim().toLowerCase()
+                          );
+                        });
 
                     return (
                       <div className="space-y-2">

@@ -175,6 +175,7 @@ export async function fetchTextbookDecks() {
 export async function saveTextbookDeck({
   id,
   title,
+  bookId = '',
   bookName,
   category = 'global_success',
   grade,
@@ -190,6 +191,7 @@ export async function saveTextbookDeck({
   const deckData = {
     id: deckId,
     title: title.trim(),
+    bookId: bookId || '',
     bookName: bookName?.trim() || '',
     category: category || 'global_success',
     grade: grade?.trim() || '',
