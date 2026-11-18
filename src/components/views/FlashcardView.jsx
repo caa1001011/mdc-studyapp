@@ -305,8 +305,17 @@ export default function FlashcardView({ currentUser: propsUser }) {
       let coverDriveFileId = editingBook?.coverDriveFileId || '';
       let coverUrl = editingBook?.coverUrl || '';
       let coverEmbedUrl = editingBook?.coverEmbedUrl || '';
+      let coverType = editingBook?.coverType || '';
 
       if (newBookCoverFile) {
+        const ext = newBookCoverFile.name.split('.').pop()?.toLowerCase() || '';
+        const isPdf = ext === 'pdf' || newBookCoverFile.type === 'application/pdf';
+        if (!['png', 'jpg', 'jpeg', 'pdf'].includes(ext)) {
+          setBookModalError('Chỉ hỗ trợ ảnh bìa định dạng .png, .jpg, .jpeg hoặc .pdf.');
+          setIsSavingBook(false);
+          return;
+        }
+
         const driveRes = await uploadFileToGoogleDrive({
           file: newBookCoverFile,
           title: newBookName.trim(),
@@ -317,8 +326,11 @@ export default function FlashcardView({ currentUser: propsUser }) {
         });
         coverDriveFileId = driveRes.driveFileId || '';
         coverEmbedUrl = driveRes.embedUrl || '';
+        coverType = isPdf ? 'pdf' : 'image';
         if (coverDriveFileId) {
-          coverUrl = `https://drive.google.com/thumbnail?id=${coverDriveFileId}&sz=w600`;
+          coverUrl = isPdf
+            ? `https://drive.google.com/thumbnail?id=${coverDriveFileId}&sz=w600`
+            : `https://drive.usercontent.google.com/download?id=${coverDriveFileId}&export=view&confirm=t`;
         }
       }
 
@@ -330,6 +342,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
         coverDriveFileId,
         coverUrl,
         coverEmbedUrl,
+        coverType,
         createdBy: username,
       });
 
@@ -610,15 +623,23 @@ export default function FlashcardView({ currentUser: propsUser }) {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
           {books.map((book) => {
+            const driveId = book.coverDriveFileId;
+            const isPdfCover = book.coverType === 'pdf';
             const coverSrc =
-              book.coverUrl ||
-              (book.coverDriveFileId
-                ? `https://drive.google.com/thumbnail?id=${book.coverDriveFileId}&sz=w600`
-                : '');
-            const fallbackCoverSrc = book.coverDriveFileId
-              ? `https://lh3.googleusercontent.com/d/${book.coverDriveFileId}=w600`
+              !isPdfCover && driveId
+                ? `https://drive.usercontent.google.com/download?id=${driveId}&export=view&confirm=t`
+                : book.coverUrl ||
+                  (driveId ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w600` : '');
+            const fallbackCoverSrc = driveId
+              ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w600`
               : '';
-            const hasCover = Boolean(coverSrc) && !failedCoverIds[book.id];
+            const embedFallbackUrl =
+              book.coverEmbedUrl ||
+              (driveId ? `https://drive.google.com/file/d/${driveId}/preview` : '');
+            const imgFailed = Boolean(failedCoverIds[book.id]);
+            const showImage = Boolean(coverSrc) && !imgFailed;
+            const showPdfIframe = !showImage && Boolean(embedFallbackUrl);
+            const hasCover = showImage || showPdfIframe;
 
             return (
               <div
@@ -628,7 +649,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   hasCover ? 'dark-surface' : ''
                 }`}
               >
-                {hasCover ? (
+                {showImage ? (
                   <>
                     <img
                       src={coverSrc}
@@ -643,6 +664,16 @@ export default function FlashcardView({ currentUser: propsUser }) {
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
+                  </>
+                ) : showPdfIframe ? (
+                  <>
+                    <iframe
+                      title={book.name}
+                      src={embedFallbackUrl}
+                      loading="lazy"
+                      className="absolute inset-0 w-full h-full border-0 pointer-events-none bg-slate-900"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
                   </>
                 ) : (
                   <div className="flex-1 flex items-center justify-center pt-4">
@@ -1756,17 +1787,17 @@ export default function FlashcardView({ currentUser: propsUser }) {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Ảnh bìa sách dạng PDF hoặc ảnh (không bắt buộc, lưu Google Drive)
+                  Ảnh bìa sách (.png, .jpg, .pdf - không bắt buộc, lưu Google Drive)
                 </label>
                 <div className="flex items-center gap-2">
                   <label className="flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer truncate">
                     <Upload className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">
-                      {newBookCoverFile ? newBookCoverFile.name : 'Chọn file PDF / ảnh bìa sách'}
+                      {newBookCoverFile ? newBookCoverFile.name : 'Chọn file PNG, JPG hoặc PDF'}
                     </span>
                     <input
                       type="file"
-                      accept=".pdf,image/*"
+                      accept=".png,.jpg,.jpeg,.pdf"
                       onChange={(e) => setNewBookCoverFile(e.target.files?.[0] || null)}
                       className="hidden"
                     />

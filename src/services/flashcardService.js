@@ -53,6 +53,7 @@ export async function saveFlashcardBook({
   coverDriveFileId = '',
   coverUrl = '',
   coverEmbedUrl = '',
+  coverType = '',
   createdBy = 'admin',
 }) {
   const cleanName = String(name || '').trim();
@@ -69,6 +70,7 @@ export async function saveFlashcardBook({
     coverDriveFileId: coverDriveFileId || '',
     coverUrl: coverUrl || '',
     coverEmbedUrl: coverEmbedUrl || '',
+    coverType: coverType || '',
     createdBy,
     createdAt: new Date().toISOString(),
   };
