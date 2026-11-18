@@ -130,6 +130,74 @@ export async function saveUserNotes(username, content) {
 }
 
 /**
+ * Lấy ghi chú nhanh theo từng thư mục bài học của người dùng (Firestore + LocalStorage fallback)
+ */
+export async function fetchFolderNotes(username, folderId) {
+  if (!username || !folderId) return DEFAULT_NOTES_CONTENT;
+  const cleanUsername = String(username).trim().toLowerCase();
+  const docId = `${cleanUsername}__folder_${folderId}`;
+  const localKey = `lumina_folder_notes_${cleanUsername}_${folderId}`;
+
+  if (db) {
+    try {
+      const noteRef = doc(db, NOTES_COLLECTION, docId);
+      const snap = await getDoc(noteRef);
+      if (snap.exists() && typeof snap.data()?.content === 'string') {
+        localStorage.setItem(localKey, snap.data().content);
+        return snap.data().content;
+      }
+    } catch (error) {
+      console.warn('Lỗi đọc ghi chú thư mục từ collection study_notes:', error);
+    }
+  }
+
+  try {
+    const local = localStorage.getItem(localKey);
+    if (local !== null) return local;
+  } catch (error) {
+    console.warn('Lỗi đọc ghi chú thư mục từ LocalStorage:', error);
+  }
+
+  return DEFAULT_NOTES_CONTENT;
+}
+
+/**
+ * Lưu ghi chú nhanh theo từng thư mục bài học lên Firebase Firestore & LocalStorage
+ */
+export async function saveFolderNotes(username, folderId, content) {
+  if (!username || !folderId) {
+    throw new Error('Không xác định được thư mục hoặc tài khoản để lưu ghi chú.');
+  }
+
+  const cleanUsername = String(username).trim().toLowerCase();
+  const docId = `${cleanUsername}__folder_${folderId}`;
+  const localKey = `lumina_folder_notes_${cleanUsername}_${folderId}`;
+  const payload = {
+    username: cleanUsername,
+    folderId,
+    content: content ?? '',
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (db) {
+    try {
+      const noteRef = doc(db, NOTES_COLLECTION, docId);
+      await setDoc(noteRef, payload, { merge: true });
+    } catch (e1) {
+      console.warn('Lỗi lưu ghi chú thư mục vào collection study_notes:', e1);
+    }
+  }
+
+  try {
+    localStorage.setItem(localKey, payload.content);
+  } catch (storageError) {
+    console.warn('Lỗi ghi LocalStorage cho ghi chú thư mục:', storageError);
+  }
+
+  return payload;
+}
+
+/**
  * Lấy danh sách bài học (file / video) của một môn học hoặc toàn bộ môn học
  */
 export async function fetchSubjectLessons(subjectId = null) {

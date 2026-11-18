@@ -35,8 +35,8 @@ import {
 import { STUDY_SUBJECTS } from '../../data/mockData';
 import { getSessionUser } from '../../services/authService';
 import {
-  fetchUserNotes,
-  saveUserNotes,
+  fetchFolderNotes,
+  saveFolderNotes,
   fetchSubjectLessons,
   uploadSubjectLesson,
   uploadDriveLesson,
@@ -132,15 +132,14 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const username = currentUser?.username || 'admin';
   const isAdmin = currentUser?.role === 'admin';
 
-  // Quick Notes state (đồng bộ theo user, nút Lưu giống Thời khóa biểu)
-  const [notesContent, setNotesContent] = useState(() => {
-    const cached = localStorage.getItem(`lumina_study_notes_${username}`);
-    return cached !== null ? cached : '';
-  });
+  // Quick Notes state (lưu riêng theo từng thư mục bài học trong Video bài giảng)
+  const [notesContent, setNotesContent] = useState('');
   const [hasUnsavedNotes, setHasUnsavedNotes] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isLoadingFolderNotes, setIsLoadingFolderNotes] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [videoSidebarTab, setVideoSidebarTab] = useState('playlist');
 
   // Lessons & Recent In-Progress Videos state
   const [allLessons, setAllLessons] = useState([]);
@@ -189,8 +188,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     async function loadInitialData() {
       setIsLoadingLessons(true);
       try {
-        const [notes, lessons, progress, loadedFolders, savedScriptUrl, loadedRecent] = await Promise.all([
-          fetchUserNotes(username),
+        const [lessons, progress, loadedFolders, savedScriptUrl, loadedRecent] = await Promise.all([
           fetchSubjectLessons(),
           fetchUserLessonProgress(username),
           fetchLessonFolders(),
@@ -199,8 +197,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
         ]);
 
         if (!isCancelled) {
-          setNotesContent(notes);
-          setHasUnsavedNotes(false);
           setAllLessons(lessons);
           setLessonProgress(progress || {});
           setFolders(loadedFolders || []);
@@ -225,12 +221,56 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     };
   }, [username]);
 
-  // Lưu ghi chú lên Firebase (y chang nút Lưu thời khóa biểu)
+  const activeVideoFolder =
+    selectedSubject && activeCategory === 'video'
+      ? selectedFolder || (activeLesson?.folderId ? folders.find((f) => f.id === activeLesson.folderId) || null : null)
+      : null;
+  const activeVideoFolderId = activeVideoFolder?.id || null;
+  const activeVideoFolderName = activeVideoFolder?.name || activeLesson?.folderName || '';
+
+  // Tải ghi chú riêng của từng thư mục bài học khi mở thư mục
+  useEffect(() => {
+    if (!activeVideoFolderId) {
+      setNotesContent('');
+      setHasUnsavedNotes(false);
+      setIsLoadingFolderNotes(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const cleanUsername = String(username || '').trim().toLowerCase();
+    const localCached = localStorage.getItem(`lumina_folder_notes_${cleanUsername}_${activeVideoFolderId}`);
+    setNotesContent(localCached !== null ? localCached : '');
+    setHasUnsavedNotes(false);
+    setIsLoadingFolderNotes(true);
+
+    fetchFolderNotes(username, activeVideoFolderId)
+      .then((loaded) => {
+        if (!isCancelled) {
+          setNotesContent(loaded);
+          setHasUnsavedNotes(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Lỗi tải ghi chú thư mục:', err);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingFolderNotes(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [username, activeVideoFolderId]);
+
+  // Lưu ghi chú của thư mục bài học hiện tại lên Firebase
   const handleSaveNotes = async () => {
-    if (!hasUnsavedNotes || isSavingNotes) return;
+    if (!activeVideoFolderId || !hasUnsavedNotes || isSavingNotes) return;
     setIsSavingNotes(true);
     try {
-      await saveUserNotes(username, notesContent);
+      await saveFolderNotes(username, activeVideoFolderId, notesContent);
       setHasUnsavedNotes(false);
     } catch (err) {
       console.error('Lỗi lưu ghi chú lên Firebase:', err);
@@ -249,11 +289,88 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     }
   };
 
+  // Trình soạn thảo "Sổ ghi chú nhanh" dùng chung trong thư mục & cạnh trình phát video
+  const renderFolderNotesEditor = (rows = 6) => (
+    <div className="space-y-3">
+      {isLoadingFolderNotes ? (
+        <div className="py-8 text-center text-xs text-slate-400 space-y-2">
+          <Loader2 className="w-5 h-5 text-purple-400 animate-spin mx-auto" />
+          <p>Đang tải ghi chú bài học...</p>
+        </div>
+      ) : (
+        <>
+          <textarea
+            rows={rows}
+            value={notesContent}
+            onChange={(e) => {
+              setNotesContent(e.target.value);
+              setHasUnsavedNotes(true);
+            }}
+            placeholder={
+              activeVideoFolderName
+                ? `Ghi chú công thức, ý chính cho "${activeVideoFolderName}"...`
+                : 'Ghi chú công thức cần nhớ, ý chính bài giảng...'
+            }
+            className="w-full p-3 rounded-xl bg-slate-50/80 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 resize-y text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-400/60 transition-colors"
+          />
+
+          <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={handleSaveNotes}
+              disabled={!hasUnsavedNotes || isSavingNotes}
+              title={
+                hasUnsavedNotes
+                  ? `Lưu ghi chú của thư mục lên Firebase cho @${username}`
+                  : 'Mặc định mờ. Nút sẽ sáng lên khi bạn chỉnh sửa nội dung ghi chú'
+              }
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                hasUnsavedNotes
+                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-600/35 hover:scale-[1.02] active:scale-[0.98] cursor-pointer border border-emerald-400/50 ring-2 ring-emerald-400/25'
+                  : 'border border-white/10 bg-white/[0.04] text-slate-400 opacity-40 cursor-not-allowed shadow-none'
+              } ${isSavingNotes ? 'cursor-wait opacity-85' : ''}`}
+            >
+              {isSavingNotes ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                  <span>Đang lưu...</span>
+                </>
+              ) : (
+                <>
+                  <Save className={`w-3.5 h-3.5 ${hasUnsavedNotes ? 'text-white' : 'text-slate-400'}`} />
+                  <span>Lưu ghi chú</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyNotes}
+              disabled={!notesContent}
+              className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+            >
+              {isCopied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Đã sao chép</span>
+                </>
+              ) : (
+                <span>Sao Chép</span>
+              )}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   // Mở modal của 1 môn học
   const handleOpenSubject = (subject) => {
     setSelectedSubject(subject);
     setActiveCategory('video');
     setSelectedFolder(null);
+    setIsNotesOpen(false);
+    setVideoSidebarTab('playlist');
     setShowNewFolderInput(false);
     setNewFolderName('');
     setFolderError('');
@@ -773,64 +890,113 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     </div>
                   </div>
 
-                  {/* Danh sách trong cùng thư mục bên phải */}
+                  {/* Danh sách phát & Sổ ghi chú nhanh tích hợp bên phải */}
                   <div className="rounded-2xl glass-card border border-white/10 p-3.5 space-y-3">
-                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {isVideoLesson ? (
-                          <Video className="w-4 h-4 text-purple-300 shrink-0" />
-                        ) : (
-                          <Network className="w-4 h-4 text-purple-300 shrink-0" />
-                        )}
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 truncate">
-                          {isVideoLesson ? 'Danh sách phát' : 'Danh sách sơ đồ'}{' '}
-                          {activeLesson.folderName ? `• ${activeLesson.folderName}` : ''}
-                        </h3>
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                        {currentIdx >= 0 ? `${currentIdx + 1}/${playlist.length}` : `${playlist.length} mục`}
-                      </span>
-                    </div>
+                    {isVideoLesson && activeVideoFolderId ? (
+                      <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setVideoSidebarTab('playlist')}
+                          className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            videoSidebarTab === 'playlist'
+                              ? 'bg-purple-600/30 text-white border border-purple-400/40 shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Video className="w-3.5 h-3.5 shrink-0" />
+                          <span>Danh sách</span>
+                          <span className="text-[10px] font-mono opacity-80">
+                            {currentIdx >= 0 ? `${currentIdx + 1}/${playlist.length}` : playlist.length}
+                          </span>
+                        </button>
 
-                    <div className="space-y-2 max-h-[460px] overflow-y-auto pr-0.5">
-                      {playlist.map((item, idx) => {
-                        const isPlaying = item.id === activeLesson.id;
-                        const ItemIcon = isVideoLesson ? Play : Network;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => {
-                              hasSeekedRef.current = false;
-                              setActiveLesson(item);
-                            }}
-                            className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center gap-3 cursor-pointer ${
-                              isPlaying
-                                ? 'bg-purple-600/25 border-purple-400/60 shadow-sm'
-                                : 'bg-white/[0.03] border-white/10 hover:border-white/25 hover:bg-white/[0.06]'
-                            }`}
-                          >
-                            <div
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        <button
+                          type="button"
+                          onClick={() => setVideoSidebarTab('notes')}
+                          className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            videoSidebarTab === 'notes'
+                              ? 'bg-purple-600/30 text-white border border-purple-400/40 shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <FileEdit className="w-3.5 h-3.5 shrink-0" />
+                          <span>Ghi chú</span>
+                          {hasUnsavedNotes ? (
+                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Chưa lưu" />
+                          ) : notesContent.trim().length > 0 ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Đã có ghi chú" />
+                          ) : null}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {isVideoLesson ? (
+                            <Video className="w-4 h-4 text-purple-300 shrink-0" />
+                          ) : (
+                            <Network className="w-4 h-4 text-purple-300 shrink-0" />
+                          )}
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 truncate">
+                            {isVideoLesson ? 'Danh sách phát' : 'Danh sách sơ đồ'}{' '}
+                            {activeLesson.folderName ? `• ${activeLesson.folderName}` : ''}
+                          </h3>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                          {currentIdx >= 0 ? `${currentIdx + 1}/${playlist.length}` : `${playlist.length} mục`}
+                        </span>
+                      </div>
+                    )}
+
+                    {isVideoLesson && activeVideoFolderId && videoSidebarTab === 'notes' ? (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                          <span className="truncate font-medium text-purple-300">
+                            {activeVideoFolderName || 'Thư mục bài học'}
+                          </span>
+                          {hasUnsavedNotes && (
+                            <span className="text-amber-400 font-semibold shrink-0">Chưa lưu</span>
+                          )}
+                        </div>
+                        {renderFolderNotesEditor(10)}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[460px] overflow-y-auto pr-0.5">
+                        {playlist.map((item, idx) => {
+                          const isPlaying = item.id === activeLesson.id;
+                          const ItemIcon = isVideoLesson ? Play : Network;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleOpenLesson(item)}
+                              className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center gap-3 cursor-pointer ${
                                 isPlaying
-                                  ? 'bg-purple-500/30 text-purple-200'
-                                  : 'bg-white/[0.05] text-slate-400'
+                                  ? 'bg-purple-600/25 border-purple-400/60 shadow-sm'
+                                  : 'bg-white/[0.03] border-white/10 hover:border-white/25 hover:bg-white/[0.06]'
                               }`}
                             >
-                              <ItemIcon className={`w-3.5 h-3.5 ${isPlaying && isVideoLesson ? 'fill-current' : ''}`} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-bold text-white truncate">
-                                {idx + 1}. {item.title}
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isPlaying
+                                    ? 'bg-purple-500/30 text-purple-200'
+                                    : 'bg-white/[0.05] text-slate-400'
+                                }`}
+                              >
+                                <ItemIcon className={`w-3.5 h-3.5 ${isPlaying && isVideoLesson ? 'fill-current' : ''}`} />
                               </div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">
-                                {isPlaying ? (isVideoLesson ? 'Đang phát' : 'Đang xem') : 'Nhấn để xem'}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-white truncate">
+                                  {idx + 1}. {item.title}
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  {isPlaying ? (isVideoLesson ? 'Đang phát' : 'Đang xem') : 'Nhấn để xem'}
+                                </div>
                               </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1350,6 +1516,55 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                 })}
               </div>
             )}
+
+                {/* SỔ GHI CHÚ NHANH TÍCH HỢP TRONG TỪNG THƯ MỤC VIDEO BÀI GIẢNG */}
+                {activeCategory === 'video' && selectedFolder && (
+                  <div className="rounded-2xl glass-card border border-white/10 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setIsNotesOpen((prev) => !prev)}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="p-1.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 shrink-0">
+                          <FileEdit className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold font-display text-white truncate">
+                              Sổ Ghi Chú Nhanh
+                            </h3>
+                            {hasUnsavedNotes ? (
+                              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Chưa lưu" />
+                            ) : notesContent.trim().length > 0 ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-semibold shrink-0">
+                                Đã có ghi chú
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            Ghi chú riêng cho thư mục "{selectedFolder.name}"
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-300 shrink-0">
+                        <span>{isNotesOpen ? 'Thu gọn' : 'Mở ghi chú'}</span>
+                        {isNotesOpen ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </div>
+                    </button>
+
+                    {isNotesOpen && (
+                      <div className="px-4 pb-4 pt-3 border-t border-white/10">
+                        {renderFolderNotesEditor(5)}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1458,147 +1673,57 @@ export default function StudySpaceView({ currentUser: propsUser }) {
         })}
       </div>
 
-      {/* 2. Recent Lessons & Collapsible Notes */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-        {/* Left: Recent Lessons */}
-        <div className="lg:col-span-2 space-y-3">
-          <h2 className="text-base sm:text-lg font-bold font-display text-white flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-emerald-400" />
-            <span>Bài Học Gần Đây</span>
-          </h2>
+      {/* 2. Recent Lessons */}
+      <div className="space-y-3">
+        <h2 className="text-base sm:text-lg font-bold font-display text-white flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-emerald-400" />
+          <span>Bài Học Gần Đây</span>
+        </h2>
 
-          {visibleRecentLessons.length === 0 ? (
-            <div className="p-5 rounded-2xl glass-card border border-white/10 text-center text-xs text-slate-400">
-              Chưa có bài học gần đây.
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {visibleRecentLessons.map((item) => {
-                const RecentIcon =
-                  item.kind === 'folder'
-                    ? Folder
-                    : item.category === 'mindmap'
-                    ? Network
-                    : item.category === 'exercise'
-                    ? ClipboardCheck
-                    : Play;
+        {visibleRecentLessons.length === 0 ? (
+          <div className="p-5 rounded-2xl glass-card border border-white/10 text-center text-xs text-slate-400">
+            Chưa có bài học gần đây.
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {visibleRecentLessons.map((item) => {
+              const RecentIcon =
+                item.kind === 'folder'
+                  ? Folder
+                  : item.category === 'mindmap'
+                  ? Network
+                  : item.category === 'exercise'
+                  ? ClipboardCheck
+                  : Play;
 
-                return (
-                  <div
-                    key={`${item.kind}-${item.id}`}
-                    onClick={() => handleOpenRecentItem(item)}
-                    className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-purple-400/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 group-hover:scale-105 transition-transform flex-shrink-0">
-                        <RecentIcon className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
-                          {item.title}
-                        </h4>
-                        <div className="text-[11px] text-purple-300 font-medium mt-0.5 truncate">
-                          {item.subjectName}
-                        </div>
+              return (
+                <div
+                  key={`${item.kind}-${item.id}`}
+                  onClick={() => handleOpenRecentItem(item)}
+                  className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-purple-400/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 group-hover:scale-105 transition-transform flex-shrink-0">
+                      <RecentIcon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
+                        {item.title}
+                      </h4>
+                      <div className="text-[11px] text-purple-300 font-medium mt-0.5 truncate">
+                        {item.subjectName}
                       </div>
                     </div>
-
-                    <span className="text-[11px] font-semibold text-purple-300 flex-shrink-0">
-                      Mở lại
-                    </span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
-        {/* Right: Collapsible Notes Pad (Gấp gọn, chỉ mở khi cần) */}
-        <div className="rounded-2xl glass-card border border-white/10 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setIsNotesOpen((prev) => !prev)}
-            className="w-full px-4 py-3.5 flex items-center justify-between gap-2 hover:bg-white/[0.03] transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <FileEdit className="w-4 h-4 text-purple-400 shrink-0" />
-              <h2 className="text-sm font-bold font-display text-white truncate">
-                Sổ Ghi Chú Nhanh
-              </h2>
-              {hasUnsavedNotes && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Chưa lưu" />
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 shrink-0">
-              <span>{isNotesOpen ? 'Thu gọn' : 'Mở ghi chú'}</span>
-              {isNotesOpen ? (
-                <ChevronUp className="w-4 h-4 text-purple-300" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-purple-300" />
-              )}
-            </div>
-          </button>
-
-          {isNotesOpen && (
-            <div className="px-4 pb-4 pt-2 border-t border-white/10 space-y-3">
-              <textarea
-                rows={7}
-                value={notesContent}
-                onChange={(e) => {
-                  setNotesContent(e.target.value);
-                  setHasUnsavedNotes(true);
-                }}
-                placeholder="Ghi chú công thức cần nhớ, bài tập giáo viên dặn..."
-                className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-transparent border border-slate-200 dark:border-transparent resize-none text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
-              />
-
-              <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveNotes}
-                  disabled={!hasUnsavedNotes || isSavingNotes}
-                  title={
-                    hasUnsavedNotes
-                      ? `Lưu ghi chú lên Firebase cho tài khoản @${username}`
-                      : 'Mặc định mờ. Nút sẽ sáng lên khi bạn chỉnh sửa nội dung ghi chú'
-                  }
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
-                    hasUnsavedNotes
-                      ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-600/35 hover:scale-[1.02] active:scale-[0.98] cursor-pointer border border-emerald-400/50 ring-2 ring-emerald-400/25'
-                      : 'border border-white/10 bg-white/[0.04] text-slate-400 opacity-40 cursor-not-allowed shadow-none'
-                  } ${isSavingNotes ? 'cursor-wait opacity-85' : ''}`}
-                >
-                  {isSavingNotes ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                      <span>Đang lưu...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className={`w-3.5 h-3.5 ${hasUnsavedNotes ? 'text-white' : 'text-slate-400'}`} />
-                      <span>Lưu ghi chú</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopyNotes}
-                  className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white flex items-center gap-1 cursor-pointer"
-                >
-                  {isCopied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Đã sao chép</span>
-                    </>
-                  ) : (
-                    <span>Sao Chép</span>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+                  <span className="text-[11px] font-semibold text-purple-300 flex-shrink-0">
+                    Mở lại
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
