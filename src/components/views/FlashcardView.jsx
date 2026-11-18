@@ -376,14 +376,14 @@ export default function FlashcardView({ currentUser: propsUser }) {
   };
 
   return (
-    <div className="space-y-5 pb-10">
-      {/* 1. Header & Actions (Hiển thị tên bộ thẻ đang chọn) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold font-display tracking-tight text-white">
+    <div className="space-y-3.5 pb-8">
+      {/* 1. Header & Actions gọn gàng trên cùng một hàng */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-extrabold font-display tracking-tight text-white truncate">
             {currentDeck ? currentDeck.title : 'Thẻ Ghi Nhớ Từ Vựng Tiếng Anh'}
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5 truncate">
             {currentDeck
               ? [currentDeck.bookName || currentDeck.unit, currentDeck.grade, `${currentCards.length} thẻ`]
                   .filter(Boolean)
@@ -392,7 +392,23 @@ export default function FlashcardView({ currentUser: propsUser }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+          {isDecksCollapsed && (
+            <button
+              type="button"
+              onClick={toggleDecksCollapsed}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl glass-card border border-white/10 hover:border-purple-400/50 transition-all cursor-pointer group"
+              title="Mở rộng danh sách bộ thẻ"
+            >
+              <PanelLeftOpen className="w-3.5 h-3.5 text-purple-300 group-hover:scale-105 transition-transform" />
+              <span className="text-xs font-bold text-slate-200 font-display">
+                Bộ thẻ
+              </span>
+              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono leading-none">
+                {textbookDecks.length + personalDecks.length}
+              </span>
+            </button>
+          )}
           <button
             onClick={() => openCreateModal(isAdmin ? 'textbook' : 'personal')}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/25 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
@@ -403,30 +419,8 @@ export default function FlashcardView({ currentUser: propsUser }) {
         </div>
       </div>
 
-      {/* 2. Thanh mở rộng nằm ngang khi đang thu gọn danh sách bộ thẻ */}
-      {isDecksCollapsed && (
-        <div>
-          <button
-            type="button"
-            onClick={toggleDecksCollapsed}
-            className="inline-flex flex-row items-center gap-2.5 px-3.5 py-2 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 transition-all cursor-pointer group"
-            title="Mở rộng danh sách bộ thẻ"
-          >
-            <span className="p-1.5 rounded-xl bg-white/[0.05] group-hover:bg-purple-600/30 border border-white/10 text-purple-300 transition-colors">
-              <PanelLeftOpen className="w-4 h-4" />
-            </span>
-            <span className="text-xs font-bold text-slate-200 font-display">
-              Danh sách bộ thẻ
-            </span>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono">
-              {textbookDecks.length + personalDecks.length}
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* 3. Main Responsive Layout: Collapsible Deck List + Center Stage + Word List */}
-      <div className="flex flex-col lg:flex-row items-start gap-6">
+      {/* 2. Main Responsive Layout: Collapsible Deck List + Center Stage + Word List */}
+      <div className="flex flex-col lg:flex-row items-start gap-5">
         {/* Left Column: Textbook Decks + Personal Decks (Scrollable) */}
         {!isDecksCollapsed && (
           <div className="w-full lg:w-72 shrink-0 transition-all duration-300">
@@ -578,7 +572,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
 
         {/* Center Stage: 3D Flashcard (tự căn giữa & mở rộng đẹp khi thu gọn danh sách bộ thẻ) */}
         <div className="flex-1 min-w-0 w-full">
-          <div className="max-w-2xl mx-auto space-y-5">
+          <div className="max-w-2xl mx-auto space-y-3.5">
           {!currentDeck || currentCards.length === 0 ? (
             <div className="rounded-3xl glass-card p-10 text-center border border-white/10 space-y-4">
               <Layers className="w-12 h-12 text-purple-400 mx-auto opacity-70" />
@@ -599,23 +593,29 @@ export default function FlashcardView({ currentUser: propsUser }) {
           ) : !isFinished && currentCard ? (
             <>
               {/* Card Index & Progress */}
-              <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                <span>
-                  Thẻ số <strong className="text-purple-300 font-bold text-sm">{currentCardIndex + 1}</strong> / {currentCards.length}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="text-emerald-400 font-semibold">✓ Đã thuộc: {rememberedCount}</span>
-                  <span className="text-rose-400 font-semibold">✗ Cần ôn lại: {reviewCount}</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400 px-0.5">
+                  <span>
+                    Thẻ số <strong className="text-purple-300 font-bold text-sm">{currentCardIndex + 1}</strong> / {currentCards.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold">
+                      ✓ Đã thuộc: {rememberedCount}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 font-semibold">
+                      ✗ Cần ôn lại: {reviewCount}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-500 via-indigo-400 to-cyan-400 transition-all duration-300"
-                  style={{
-                    width: `${((currentCardIndex + 1) / currentCards.length) * 100}%`,
-                  }}
-                />
+                <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-500 via-indigo-400 to-cyan-400 transition-all duration-300"
+                    style={{
+                      width: `${((currentCardIndex + 1) / currentCards.length) * 100}%`,
+                    }}
+                  />
+                </div>
               </div>
 
               {/* 3D Flip Card - Co giãn linh hoạt theo nội dung, không dùng glass-card để tránh :hover ghi đè rotate-y-180 */}
