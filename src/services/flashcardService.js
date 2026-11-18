@@ -81,6 +81,7 @@ export async function saveFlashcardBook({
   coverType = '',
   coverImage = '',
   createdBy = 'admin',
+  createdAt = '',
 }) {
   const cleanName = String(name || '').trim();
   if (!cleanName) {
@@ -99,7 +100,7 @@ export async function saveFlashcardBook({
     coverType: coverType || '',
     coverImage: coverImage || '',
     createdBy,
-    createdAt: new Date().toISOString(),
+    createdAt: createdAt || new Date().toISOString(),
   };
 
   if (db) {

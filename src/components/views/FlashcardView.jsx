@@ -24,6 +24,7 @@ import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
 import {
   uploadFileToGoogleDrive,
+  deleteFileFromGoogleDrive,
   fetchAppsScriptUrl,
   getSavedAppsScriptUrl,
   saveAppsScriptUrl
@@ -379,7 +380,8 @@ export default function FlashcardView({ currentUser: propsUser }) {
         coverEmbedUrl,
         coverType,
         coverImage,
-        createdBy: username,
+        createdBy: editingBook?.createdBy || username,
+        createdAt: editingBook?.createdAt || '',
       });
 
       if (editingBook) {
@@ -431,14 +433,40 @@ export default function FlashcardView({ currentUser: propsUser }) {
     }
   };
 
-  const handleDeleteBook = async (book, deckCount, e) => {
+  const handleDeleteBook = async (book, e) => {
     if (e) e.stopPropagation();
-    if (!isAdmin || deckCount > 0) return;
-    if (!window.confirm(`Xóa thư mục sách "${book.name}"?`)) return;
-    await deleteFlashcardBook(book.id);
-    setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
-    if (selectedBookFolder?.id === book.id) {
-      setSelectedBookFolder(null);
+    if (!isAdmin || !book) return;
+    const decksInBook = Array.isArray(book.decks) ? book.decks : [];
+    const confirmMsg =
+      decksInBook.length > 0
+        ? `Xóa thư mục sách "${book.name}" và toàn bộ ${decksInBook.length} bộ thẻ bên trong?`
+        : `Xóa thư mục sách "${book.name}"?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      if (decksInBook.length > 0) {
+        await Promise.all(decksInBook.map((d) => deleteTextbookDeck(d.id)));
+        const deletedIds = new Set(decksInBook.map((d) => d.id));
+        setTextbookDecks((prev) => prev.filter((d) => !deletedIds.has(d.id)));
+        if (deletedIds.has(selectedDeckId)) {
+          setSelectedDeckId(null);
+          handleRestart();
+        }
+      }
+
+      if (!String(book.id).startsWith('auto-')) {
+        await deleteFlashcardBook(book.id);
+      }
+      if (book.coverDriveFileId) {
+        deleteFileFromGoogleDrive(book.coverDriveFileId);
+      }
+
+      setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
+      if (selectedBookFolder?.id === book.id) {
+        setSelectedBookFolder(null);
+      }
+    } catch (err) {
+      alert(err.message || 'Không thể xóa thư mục sách.');
     }
   };
 
@@ -718,16 +746,14 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    {book.decks.length === 0 && !String(book.id).startsWith('auto-') && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteBook(book, book.decks.length, e)}
-                        className="p-1.5 rounded-lg bg-black/55 text-rose-300 hover:bg-rose-500 hover:text-white cursor-pointer"
-                        title="Xóa thư mục sách trống"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteBook(book, e)}
+                      className="p-1.5 rounded-lg bg-black/55 text-rose-300 hover:bg-rose-500 hover:text-white cursor-pointer"
+                      title="Xóa thư mục sách"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
 
