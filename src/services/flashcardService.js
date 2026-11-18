@@ -43,9 +43,10 @@ export async function fetchFlashcardBooks() {
 }
 
 /**
- * Admin: Tạo thư mục sách mới trong Global Success hoặc Mở rộng
+ * Admin: Tạo hoặc cập nhật thư mục sách trong Global Success hoặc Mở rộng
  */
 export async function saveFlashcardBook({
+  id,
   name,
   category = 'global_success',
   grade = '',
@@ -59,7 +60,7 @@ export async function saveFlashcardBook({
     throw new Error('Vui lòng nhập tên sách.');
   }
 
-  const bookId = `book-${category}-${Date.now()}`;
+  const bookId = id || `book-${category}-${Date.now()}`;
   const bookData = {
     id: bookId,
     name: cleanName,
@@ -79,7 +80,11 @@ export async function saveFlashcardBook({
   try {
     const raw = localStorage.getItem('lumina_flashcard_books');
     const current = raw ? JSON.parse(raw) : [];
-    localStorage.setItem('lumina_flashcard_books', JSON.stringify([...current, bookData]));
+    const exists = current.some((b) => b.id === bookId);
+    const next = exists
+      ? current.map((b) => (b.id === bookId ? { ...b, ...bookData, createdAt: b.createdAt || bookData.createdAt } : b))
+      : [...current, bookData];
+    localStorage.setItem('lumina_flashcard_books', JSON.stringify(next));
   } catch {
     // ignore
   }

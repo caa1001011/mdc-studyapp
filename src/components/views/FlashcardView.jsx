@@ -14,11 +14,11 @@ import {
   Upload,
   Loader2,
   Save,
-  Image as ImageIcon,
   PanelLeftClose,
   PanelLeftOpen,
   ArrowLeft,
-  Folder
+  Folder,
+  Pencil
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
@@ -38,7 +38,6 @@ import {
   fetchUserFlashcardDecks,
   saveUserFlashcardDeck,
   deleteUserFlashcardDeck,
-  compressCoverImage,
   generateFlashcardsFromDocument
 } from '../../services/flashcardService';
 
@@ -67,12 +66,14 @@ export default function FlashcardView({ currentUser: propsUser }) {
   // Thư mục sách đang chọn (null = trang tổng quan; object = xem các Unit/bộ thẻ trong sách)
   const [selectedBookFolder, setSelectedBookFolder] = useState(null);
 
-  // Modal tạo thư mục sách (Admin)
+  // Modal tạo / chỉnh sửa thư mục sách (Admin)
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [editingBook, setEditingBook] = useState(null);
   const [addingBookCategory, setAddingBookCategory] = useState('global_success'); // 'global_success' | 'extended'
   const [newBookName, setNewBookName] = useState('');
   const [newBookGrade, setNewBookGrade] = useState('');
   const [newBookCoverFile, setNewBookCoverFile] = useState(null);
+  const [failedCoverIds, setFailedCoverIds] = useState({});
   const [bookUploadProgress, setBookUploadProgress] = useState(0);
   const [bookModalError, setBookModalError] = useState('');
   const [isSavingBook, setIsSavingBook] = useState(false);
@@ -95,8 +96,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [deckTitle, setDeckTitle] = useState('');
   const [bookName, setBookName] = useState('');
   const [grade, setGrade] = useState('');
-  const [coverImage, setCoverImage] = useState('');
-  const [isProcessingCover, setIsProcessingCover] = useState(false);
   const [draftCards, setDraftCards] = useState([EMPTY_CARD()]);
 
   // AI Document import state
@@ -238,7 +237,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setDeckTitle('');
     setBookName(options.bookName || '');
     setGrade(options.grade || '');
-    setCoverImage('');
     setDraftCards([EMPTY_CARD()]);
     setDocText('');
     setDocFile(null);
@@ -249,6 +247,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
 
   // Admin: Mở modal tạo thư mục sách
   const openCreateBookModal = (category) => {
+    setEditingBook(null);
     setAddingBookCategory(category);
     setNewBookName('');
     setNewBookGrade('');
@@ -258,7 +257,20 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setIsBookModalOpen(true);
   };
 
-  // Admin: Tạo thư mục sách mới (tùy chọn tải ảnh/PDF bìa lên Google Drive)
+  // Admin: Mở modal chỉnh sửa thư mục sách
+  const openEditBookModal = (book, e) => {
+    if (e) e.stopPropagation();
+    setEditingBook(book);
+    setAddingBookCategory(book.category || 'global_success');
+    setNewBookName(book.name || '');
+    setNewBookGrade(book.grade || '');
+    setNewBookCoverFile(null);
+    setBookUploadProgress(0);
+    setBookModalError('');
+    setIsBookModalOpen(true);
+  };
+
+  // Admin: Tạo hoặc cập nhật thư mục sách (tùy chọn tải ảnh/PDF bìa lên Google Drive)
   const handleAddBook = async (e) => {
     e.preventDefault();
     if (!isAdmin || !newBookName.trim() || isSavingBook) return;
@@ -267,9 +279,9 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setBookUploadProgress(0);
 
     try {
-      let coverDriveFileId = '';
-      let coverUrl = '';
-      let coverEmbedUrl = '';
+      let coverDriveFileId = editingBook?.coverDriveFileId || '';
+      let coverUrl = editingBook?.coverUrl || '';
+      let coverEmbedUrl = editingBook?.coverEmbedUrl || '';
 
       if (newBookCoverFile) {
         const driveRes = await uploadFileToGoogleDrive({
@@ -288,6 +300,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
       }
 
       const saved = await saveFlashcardBook({
+        id: editingBook?.id && !String(editingBook.id).startsWith('auto-') ? editingBook.id : undefined,
         name: newBookName,
         category: addingBookCategory,
         grade: newBookGrade,
@@ -296,10 +309,51 @@ export default function FlashcardView({ currentUser: propsUser }) {
         coverEmbedUrl,
         createdBy: username,
       });
-      setFlashcardBooks((prev) => [...prev, saved]);
+
+      if (editingBook) {
+        setFlashcardBooks((prev) => {
+          const exists = prev.some((b) => b.id === saved.id);
+          return exists ? prev.map((b) => (b.id === saved.id ? saved : b)) : [...prev, saved];
+        });
+        setFailedCoverIds((prev) => {
+          const next = { ...prev };
+          delete next[saved.id];
+          return next;
+        });
+
+        // Nếu đổi tên sách, cập nhật lại bookName cho các bộ thẻ thuộc sách đó
+        const oldName = (editingBook.name || '').trim().toLowerCase();
+        const newNameClean = newBookName.trim();
+        if (oldName && oldName !== newNameClean.toLowerCase()) {
+          const affectedDecks = textbookDecks.filter(
+            (d) =>
+              (d.category || 'global_success') === addingBookCategory &&
+              (d.bookName || '').trim().toLowerCase() === oldName
+          );
+          if (affectedDecks.length > 0) {
+            await Promise.all(
+              affectedDecks.map((d) =>
+                saveTextbookDeck({ ...d, bookName: newNameClean, category: addingBookCategory })
+              )
+            );
+            setTextbookDecks((prev) =>
+              prev.map((d) =>
+                affectedDecks.some((a) => a.id === d.id) ? { ...d, bookName: newNameClean } : d
+              )
+            );
+          }
+        }
+
+        if (selectedBookFolder?.id === editingBook.id) {
+          setSelectedBookFolder((prev) => (prev ? { ...prev, ...saved } : null));
+        }
+      } else {
+        setFlashcardBooks((prev) => [...prev, saved]);
+      }
+
       setIsBookModalOpen(false);
     } catch (err) {
-      setBookModalError(err.message || 'Không thể tạo thư mục sách.');
+      setBookModalError(err.message || 'Không thể lưu thư mục sách.');
     } finally {
       setIsSavingBook(false);
     }
@@ -313,23 +367,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
     if (selectedBookFolder?.id === book.id) {
       setSelectedBookFolder(null);
-    }
-  };
-
-  // Tải & nén ảnh bìa sách (dành cho Admin)
-  const handleCoverImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setModalError('');
-    setIsProcessingCover(true);
-    try {
-      const compressed = await compressCoverImage(file);
-      setCoverImage(compressed);
-    } catch (err) {
-      setModalError(err.message || 'Không thể xử lý ảnh bìa.');
-    } finally {
-      setIsProcessingCover(false);
-      e.target.value = '';
     }
   };
 
@@ -425,12 +462,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
           bookName,
           category: bookCategory,
           grade,
-          coverImage,
           cards: validCards,
           createdBy: username,
         });
         setTextbookDecks((prev) => [...prev.filter((d) => d.id !== saved.id), saved]);
-        handleSelectDeck(saved.id);
       } else {
         const saved = await saveUserFlashcardDeck(username, {
           title: deckTitle,
@@ -557,14 +592,17 @@ export default function FlashcardView({ currentUser: propsUser }) {
             const fallbackCoverSrc = book.coverDriveFileId
               ? `https://lh3.googleusercontent.com/d/${book.coverDriveFileId}=w600`
               : '';
+            const hasCover = Boolean(coverSrc) && !failedCoverIds[book.id];
 
             return (
               <div
                 key={book.id}
                 onClick={() => setSelectedBookFolder(book)}
-                className="aspect-square rounded-2xl glass-card border border-white/10 hover:border-purple-400/60 cursor-pointer transition-all relative overflow-hidden group flex flex-col justify-between"
+                className={`aspect-square rounded-2xl glass-card border border-white/10 hover:border-purple-400/60 cursor-pointer transition-all relative overflow-hidden group flex flex-col justify-between ${
+                  hasCover ? 'dark-surface' : ''
+                }`}
               >
-                {coverSrc ? (
+                {hasCover ? (
                   <>
                     <img
                       src={coverSrc}
@@ -573,12 +611,12 @@ export default function FlashcardView({ currentUser: propsUser }) {
                         if (fallbackCoverSrc && e.currentTarget.src !== fallbackCoverSrc) {
                           e.currentTarget.src = fallbackCoverSrc;
                         } else {
-                          e.currentTarget.style.display = 'none';
+                          setFailedCoverIds((prev) => ({ ...prev, [book.id]: true }));
                         }
                       }}
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/15" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
                   </>
                 ) : (
                   <div className="flex-1 flex items-center justify-center pt-4">
@@ -588,28 +626,40 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   </div>
                 )}
 
-                {isAdmin && book.decks.length === 0 && !String(book.id).startsWith('auto-') && (
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteBook(book, book.decks.length, e)}
-                    className="absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-black/50 text-rose-300 hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    title="Xóa thư mục sách trống"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                {isAdmin && (
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => openEditBookModal(book, e)}
+                      className="p-1.5 rounded-lg bg-black/55 text-purple-200 hover:bg-purple-600 hover:text-white cursor-pointer"
+                      title="Chỉnh sửa thư mục sách"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    {book.decks.length === 0 && !String(book.id).startsWith('auto-') && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteBook(book, book.decks.length, e)}
+                        className="p-1.5 rounded-lg bg-black/55 text-rose-300 hover:bg-rose-500 hover:text-white cursor-pointer"
+                        title="Xóa thư mục sách trống"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 <div className="relative z-10 p-3 mt-auto">
                   <h3
                     className={`text-xs sm:text-sm font-bold line-clamp-2 font-display ${
-                      coverSrc ? 'text-white drop-shadow' : 'text-white group-hover:text-purple-300 transition-colors'
+                      hasCover ? 'text-white drop-shadow' : 'text-white group-hover:text-purple-300 transition-colors'
                     }`}
                   >
                     {book.name}
                   </h3>
                   <div
                     className={`flex items-center justify-between text-[11px] mt-1 ${
-                      coverSrc ? 'text-slate-200' : 'text-slate-400'
+                      hasCover ? 'text-slate-200' : 'text-slate-400'
                     }`}
                   >
                     <span className="truncate">{book.grade || `${book.decks.length} bộ thẻ`}</span>
@@ -724,6 +774,16 @@ export default function FlashcardView({ currentUser: propsUser }) {
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Tạo Bộ Thẻ Mới</span>
+            </button>
+          )}
+          {isAdmin && !currentDeck && activeBookFolder && (
+            <button
+              type="button"
+              onClick={(e) => openEditBookModal(activeBookFolder, e)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer whitespace-nowrap"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Chỉnh sửa thư mục</span>
             </button>
           )}
         </div>
@@ -911,88 +971,12 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </button>
               </div>
 
-              {/* Vùng cuộn riêng cho danh sách bộ thẻ */}
+              {/* Vùng cuộn riêng cho danh sách bộ thẻ (chỉ hiển thị các bộ thẻ thuộc cuốn sách đang chọn hoặc Bộ thẻ cá nhân) */}
               <div className="max-h-[calc(100vh-270px)] min-h-[200px] overflow-y-auto pr-1 space-y-4">
-                {/* Sách Giáo Khoa (Admin cung cấp) */}
-                <div className="space-y-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between">
-                    <span>Sách Giáo Khoa (Theo Unit)</span>
-                    <span className="text-[10px] text-purple-300 font-mono">{textbookDecks.length}</span>
-                  </h3>
-
-                  {isLoading ? (
-                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-center text-xs text-slate-400">
-                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-purple-400" />
-                      Đang tải...
-                    </div>
-                  ) : textbookDecks.length === 0 ? (
-                    <div className="p-3 rounded-xl border border-dashed border-white/10 text-xs text-slate-400 text-center">
-                      Chưa có bộ thẻ sách giáo khoa nào.
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {textbookDecks.map((deck) => {
-                        const isSelected = selectedDeckId === deck.id;
-                        return (
-                          <div
-                            key={deck.id}
-                            onClick={() => handleSelectDeck(deck.id)}
-                            className={`p-2.5 rounded-xl border cursor-pointer transition-all group ${
-                              isSelected
-                                ? 'border-purple-400/60 bg-purple-500/15 shadow-md shadow-purple-500/15'
-                                : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              {deck.coverImage ? (
-                                <img
-                                  src={deck.coverImage}
-                                  alt={deck.bookName || deck.title}
-                                  className="w-9 h-11 rounded-lg object-cover border border-white/15 shrink-0 bg-white/5"
-                                />
-                              ) : (
-                                <div className="w-9 h-11 rounded-lg border border-white/10 bg-amber-500/10 flex items-center justify-center shrink-0">
-                                  <BookOpen className="w-4 h-4 text-amber-300/75" />
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-1.5">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 truncate">
-                                    {[deck.bookName || deck.unit || 'Sách Giáo Khoa', deck.grade].filter(Boolean).join(' • ')}
-                                  </span>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <span className="text-[10px] text-slate-400">
-                                      {deck.cards?.length || 0} từ
-                                    </span>
-                                    {isAdmin && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => handleDeleteDeck(deck, e)}
-                                        className="p-0.5 rounded-md text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                        title="Xóa bộ thẻ SGK"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                <h4 className="text-xs font-bold text-white mt-0.5 line-clamp-1 font-display">
-                                  {deck.title}
-                                </h4>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Bộ Thẻ Cá Nhân (Người học tự tạo) */}
-                {personalDecks.length > 0 && (
-                  <div className="space-y-2 pt-2 border-t border-white/10">
+                {currentDeck?.sourceType === 'personal' ? (
+                  <div className="space-y-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between">
-                      <span>Bộ Thẻ Tự Tạo</span>
+                      <span>Bộ thẻ cá nhân</span>
                       <span className="text-[10px] text-cyan-300 font-mono">{personalDecks.length}</span>
                     </h3>
 
@@ -1035,6 +1019,69 @@ export default function FlashcardView({ currentUser: propsUser }) {
                       })}
                     </div>
                   </div>
+                ) : (
+                  (() => {
+                    const currentBookName = (currentDeck?.bookName || activeBookFolder?.name || '').trim();
+                    const currentCat = currentDeck?.category || activeBookFolder?.category || 'global_success';
+                    const scopedDecks = textbookDecks.filter(
+                      (d) =>
+                        (d.category || 'global_success') === currentCat &&
+                        (d.bookName || '').trim().toLowerCase() === currentBookName.toLowerCase()
+                    );
+
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 font-display flex items-center justify-between gap-2">
+                          <span className="truncate">{currentBookName || 'Bộ thẻ trong sách'}</span>
+                          <span className="text-[10px] text-purple-300 font-mono shrink-0">{scopedDecks.length}</span>
+                        </h3>
+
+                        {scopedDecks.length === 0 ? (
+                          <div className="p-3 rounded-xl border border-dashed border-white/10 text-xs text-slate-400 text-center">
+                            Chưa có bộ thẻ nào trong sách này.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {scopedDecks.map((deck) => {
+                              const isSelected = selectedDeckId === deck.id;
+                              return (
+                                <div
+                                  key={deck.id}
+                                  onClick={() => handleSelectDeck(deck.id)}
+                                  className={`p-2.5 rounded-xl border cursor-pointer transition-all group ${
+                                    isSelected
+                                      ? 'border-purple-400/60 bg-purple-500/15 shadow-md shadow-purple-500/15'
+                                      : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <h4 className="text-xs font-bold text-white line-clamp-1 font-display">
+                                      {deck.title}
+                                    </h4>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-[10px] text-slate-400">
+                                        {deck.cards?.length || 0} từ
+                                      </span>
+                                      {isAdmin && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleDeleteDeck(deck, e)}
+                                          className="p-0.5 rounded-md text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                          title="Xóa bộ thẻ"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             </div>
@@ -1353,59 +1400,18 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Tên sách *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="VD: Global Success 12"
-                        value={bookName}
-                        onChange={(e) => setBookName(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Ảnh bìa sách (tùy chọn)
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <label className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl glass-button text-xs font-semibold text-amber-200 cursor-pointer">
-                          {isProcessingCover ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <ImageIcon className="w-3.5 h-3.5" />
-                          )}
-                          <span>{coverImage ? 'Đổi ảnh bìa' : 'Chèn ảnh bìa'}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleCoverImageUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        {coverImage && (
-                          <div className="relative flex items-center gap-2">
-                            <img
-                              src={coverImage}
-                              alt="Bìa sách"
-                              className="w-10 h-12 rounded-lg object-cover border border-white/20"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setCoverImage('')}
-                              className="p-1 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 cursor-pointer"
-                              title="Xóa ảnh bìa"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Tên sách *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="VD: Global Success 12"
+                      value={bookName}
+                      onChange={(e) => setBookName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                    />
                   </div>
                 </div>
               ) : (
@@ -1653,7 +1659,9 @@ export default function FlashcardView({ currentUser: propsUser }) {
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
               <div>
                 <h3 className="text-base sm:text-lg font-bold font-display text-white">
-                  {addingBookCategory === 'extended'
+                  {editingBook
+                    ? 'Chỉnh Sửa Thư Mục Sách'
+                    : addingBookCategory === 'extended'
                     ? 'Tạo Thư Mục Sách Mở Rộng'
                     : 'Tạo Thư Mục Sách Global Success'}
                 </h3>
@@ -1783,12 +1791,12 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   {isSavingBook ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Đang tạo...</span>
+                      <span>Đang lưu...</span>
                     </>
                   ) : (
                     <>
                       <Save className="w-3.5 h-3.5" />
-                      <span>Tạo Thư Mục</span>
+                      <span>{editingBook ? 'Lưu Thay Đổi' : 'Tạo Thư Mục'}</span>
                     </>
                   )}
                 </button>
