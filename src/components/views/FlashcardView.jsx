@@ -1754,7 +1754,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
               {isSavingBook && newBookCoverFile && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[11px] text-slate-300">
-                    <span>Đang lưu bìa sách lên Google Drive...</span>
+                    <span>Đang lưu bìa sách</span>
                     <span className="font-mono font-bold text-purple-300">{bookUploadProgress}%</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
