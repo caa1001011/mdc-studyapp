@@ -93,6 +93,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
   // Modal tạo bộ thẻ (Admin tạo trong sách Global Success / Mở rộng, Học sinh tạo Bộ thẻ cá nhân)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPersonalDeck, setEditingPersonalDeck] = useState(null);
+  const [editingTextbookDeck, setEditingTextbookDeck] = useState(null);
   const [createTarget, setCreateTarget] = useState('personal'); // 'personal' | 'textbook'
   const [bookCategory, setBookCategory] = useState('global_success'); // 'global_success' | 'extended'
   const [createMethod, setCreateMethod] = useState('manual'); // 'manual' | 'ai'
@@ -235,6 +236,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
   // Mở Modal Tạo Bộ Thẻ
   const openCreateModal = (target, options = {}) => {
     setEditingPersonalDeck(null);
+    setEditingTextbookDeck(null);
     setCreateTarget(target);
     setBookCategory(options.category || 'global_success');
     setCreateMethod('manual');
@@ -258,6 +260,29 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setDeckTitle(deck.title || '');
     setBookName('');
     setGrade('');
+    setDraftCards(
+      Array.isArray(deck.cards) && deck.cards.length > 0
+        ? deck.cards.map((c) => ({ ...EMPTY_CARD(), ...c }))
+        : [EMPTY_CARD()]
+    );
+    setDocText('');
+    setDocFile(null);
+    setAiPreviewReady(false);
+    setModalError('');
+    setIsCreateModalOpen(true);
+  };
+
+  // Admin: Mở modal chỉnh sửa bộ thẻ đã tạo trong thư mục sách
+  const openEditTextbookDeckModal = (deck, e) => {
+    if (e) e.stopPropagation();
+    setEditingPersonalDeck(null);
+    setEditingTextbookDeck(deck);
+    setCreateTarget('textbook');
+    setBookCategory(deck.category || activeBookFolder?.category || 'global_success');
+    setCreateMethod('manual');
+    setDeckTitle(deck.title || '');
+    setBookName(deck.bookName || activeBookFolder?.name || '');
+    setGrade(deck.grade || activeBookFolder?.grade || '');
     setDraftCards(
       Array.isArray(deck.cards) && deck.cards.length > 0
         ? deck.cards.map((c) => ({ ...EMPTY_CARD(), ...c }))
@@ -505,6 +530,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
     try {
       if (createTarget === 'textbook' && isAdmin) {
         const saved = await saveTextbookDeck({
+          id: editingTextbookDeck?.id,
           title: deckTitle,
           bookName,
           category: bookCategory,
@@ -512,7 +538,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
           cards: validCards,
           createdBy: username,
         });
-        setTextbookDecks((prev) => [...prev.filter((d) => d.id !== saved.id), saved]);
+        setTextbookDecks((prev) => {
+          const exists = prev.some((d) => d.id === saved.id);
+          return exists ? prev.map((d) => (d.id === saved.id ? saved : d)) : [...prev, saved];
+        });
       } else {
         const saved = await saveUserFlashcardDeck(username, {
           id: editingPersonalDeck?.id,
@@ -964,14 +993,24 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     )}
 
                     {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteDeck(deck, e)}
-                        className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                        title="Xóa bộ thẻ"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => openEditTextbookDeckModal(deck, e)}
+                          className="p-1 rounded-lg text-purple-300 hover:bg-purple-500/20 cursor-pointer"
+                          title="Chỉnh sửa bộ thẻ"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteDeck(deck, e)}
+                          className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                          title="Xóa bộ thẻ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -1403,7 +1442,9 @@ export default function FlashcardView({ currentUser: propsUser }) {
               <div>
                 <h3 className="text-lg font-bold font-display text-white">
                   {createTarget === 'textbook'
-                    ? bookCategory === 'extended'
+                    ? editingTextbookDeck
+                      ? `Chỉnh Sửa Bộ Thẻ • ${editingTextbookDeck.title}`
+                      : bookCategory === 'extended'
                       ? `Thêm Bộ Thẻ Mở Rộng • ${bookName || 'Mở rộng'}`
                       : `Thêm Bộ Thẻ Unit • ${bookName || 'Global Success'}`
                     : editingPersonalDeck
