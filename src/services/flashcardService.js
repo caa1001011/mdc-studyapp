@@ -13,14 +13,8 @@ const TEXTBOOK_DECKS_COLLECTION = 'textbook_flashcard_decks';
 const USER_DECKS_COLLECTION = 'user_flashcard_decks';
 const FLASHCARD_BOOKS_COLLECTION = 'flashcard_books';
 
-const DEFAULT_GLOBAL_SUCCESS_BOOKS = [
-  { id: 'book-gs-10', name: 'Global Success 10', category: 'global_success' },
-  { id: 'book-gs-11', name: 'Global Success 11', category: 'global_success' },
-  { id: 'book-gs-12', name: 'Global Success 12', category: 'global_success' },
-];
-
 /**
- * Lấy danh sách đầu sách Flashcard (Global Success & Mở rộng)
+ * Lấy danh sách thư mục sách Flashcard (Global Success & Mở rộng)
  */
 export async function fetchFlashcardBooks() {
   let saved = [];
@@ -32,7 +26,7 @@ export async function fetchFlashcardBooks() {
       });
       localStorage.setItem('lumina_flashcard_books', JSON.stringify(saved));
     } catch (error) {
-      console.warn('Lỗi tải danh sách đầu sách Flashcard từ Firestore:', error);
+      console.warn('Lỗi tải danh sách thư mục sách Flashcard từ Firestore:', error);
     }
   }
 
@@ -45,24 +39,21 @@ export async function fetchFlashcardBooks() {
     }
   }
 
-  // Đảm bảo luôn có sẵn bộ sách giáo khoa Global Success mặc định nếu chưa có
-  const merged = [...saved];
-  DEFAULT_GLOBAL_SUCCESS_BOOKS.forEach((def) => {
-    const exists = merged.some(
-      (b) => (b.category || 'global_success') === def.category && b.name?.toLowerCase() === def.name.toLowerCase()
-    );
-    if (!exists) {
-      merged.push(def);
-    }
-  });
-
-  return merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  return saved.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 }
 
 /**
- * Admin: Thêm một đầu sách mới vào Global Success hoặc Mở rộng
+ * Admin: Tạo thư mục sách mới trong Global Success hoặc Mở rộng
  */
-export async function saveFlashcardBook({ name, category = 'global_success', createdBy = 'admin' }) {
+export async function saveFlashcardBook({
+  name,
+  category = 'global_success',
+  grade = '',
+  coverDriveFileId = '',
+  coverUrl = '',
+  coverEmbedUrl = '',
+  createdBy = 'admin',
+}) {
   const cleanName = String(name || '').trim();
   if (!cleanName) {
     throw new Error('Vui lòng nhập tên sách.');
@@ -73,6 +64,10 @@ export async function saveFlashcardBook({ name, category = 'global_success', cre
     id: bookId,
     name: cleanName,
     category,
+    grade: String(grade || '').trim(),
+    coverDriveFileId: coverDriveFileId || '',
+    coverUrl: coverUrl || '',
+    coverEmbedUrl: coverEmbedUrl || '',
     createdBy,
     createdAt: new Date().toISOString(),
   };
@@ -93,14 +88,14 @@ export async function saveFlashcardBook({ name, category = 'global_success', cre
 }
 
 /**
- * Admin: Xóa đầu sách Flashcard
+ * Admin: Xóa thư mục sách Flashcard
  */
 export async function deleteFlashcardBook(bookId) {
-  if (db && !String(bookId).startsWith('book-gs-')) {
+  if (db) {
     try {
       await deleteDoc(doc(db, FLASHCARD_BOOKS_COLLECTION, bookId));
     } catch (err) {
-      console.warn('Lỗi xóa đầu sách trên Firestore:', err);
+      console.warn('Lỗi xóa thư mục sách trên Firestore:', err);
     }
   }
 

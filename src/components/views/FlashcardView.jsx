@@ -18,10 +18,16 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ArrowLeft,
-  FolderPlus
+  Folder
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
+import {
+  uploadFileToGoogleDrive,
+  fetchAppsScriptUrl,
+  getSavedAppsScriptUrl,
+  saveAppsScriptUrl
+} from '../../services/googleDriveService';
 import {
   fetchTextbookDecks,
   saveTextbookDeck,
@@ -58,10 +64,20 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [personalDecks, setPersonalDecks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Admin thêm sách mới cho Global Success / Mở rộng
-  const [addingBookCategory, setAddingBookCategory] = useState(null); // 'global_success' | 'extended' | null
+  // Thư mục sách đang chọn (null = trang tổng quan; object = xem các Unit/bộ thẻ trong sách)
+  const [selectedBookFolder, setSelectedBookFolder] = useState(null);
+
+  // Modal tạo thư mục sách (Admin)
+  const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [addingBookCategory, setAddingBookCategory] = useState('global_success'); // 'global_success' | 'extended'
   const [newBookName, setNewBookName] = useState('');
+  const [newBookGrade, setNewBookGrade] = useState('');
+  const [newBookCoverFile, setNewBookCoverFile] = useState(null);
+  const [bookUploadProgress, setBookUploadProgress] = useState(0);
+  const [bookModalError, setBookModalError] = useState('');
   const [isSavingBook, setIsSavingBook] = useState(false);
+  const [appsScriptUrl, setAppsScriptUrl] = useState(() => getSavedAppsScriptUrl());
+  const [showScriptConfig, setShowScriptConfig] = useState(() => !getSavedAppsScriptUrl());
 
   // Bộ thẻ đang chọn học (null = trang danh sách 3 phần)
   const [selectedDeckId, setSelectedDeckId] = useState(null);
@@ -110,10 +126,11 @@ export default function FlashcardView({ currentUser: propsUser }) {
     async function loadDecks() {
       setIsLoading(true);
       try {
-        const [tbDecks, books, myDecks] = await Promise.all([
+        const [tbDecks, books, myDecks, savedScriptUrl] = await Promise.all([
           fetchTextbookDecks(),
           fetchFlashcardBooks(),
           fetchUserFlashcardDecks(username),
+          fetchAppsScriptUrl(),
         ]);
 
         if (!isCancelled) {
@@ -121,6 +138,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
           setFlashcardBooks(books);
           setPersonalDecks(myDecks);
           setSelectedDeckId(null);
+          if (savedScriptUrl) {
+            setAppsScriptUrl(savedScriptUrl);
+            setShowScriptConfig(false);
+          }
         }
       } catch (err) {
         console.error('Lỗi tải dữ liệu Flashcard:', err);
@@ -226,32 +247,73 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setIsCreateModalOpen(true);
   };
 
-  // Admin: Thêm sách mới vào Global Success hoặc Mở rộng
+  // Admin: Mở modal tạo thư mục sách
+  const openCreateBookModal = (category) => {
+    setAddingBookCategory(category);
+    setNewBookName('');
+    setNewBookGrade('');
+    setNewBookCoverFile(null);
+    setBookUploadProgress(0);
+    setBookModalError('');
+    setIsBookModalOpen(true);
+  };
+
+  // Admin: Tạo thư mục sách mới (tùy chọn tải ảnh/PDF bìa lên Google Drive)
   const handleAddBook = async (e) => {
     e.preventDefault();
-    if (!isAdmin || !addingBookCategory || !newBookName.trim() || isSavingBook) return;
+    if (!isAdmin || !newBookName.trim() || isSavingBook) return;
+    setBookModalError('');
     setIsSavingBook(true);
+    setBookUploadProgress(0);
+
     try {
+      let coverDriveFileId = '';
+      let coverUrl = '';
+      let coverEmbedUrl = '';
+
+      if (newBookCoverFile) {
+        const driveRes = await uploadFileToGoogleDrive({
+          file: newBookCoverFile,
+          title: newBookName.trim(),
+          subject: 'Tiếng Anh',
+          folderName: `Flashcard - ${newBookName.trim()}`,
+          appsScriptUrl,
+          onProgress: (pct) => setBookUploadProgress(pct),
+        });
+        coverDriveFileId = driveRes.driveFileId || '';
+        coverEmbedUrl = driveRes.embedUrl || '';
+        if (coverDriveFileId) {
+          coverUrl = `https://drive.google.com/thumbnail?id=${coverDriveFileId}&sz=w600`;
+        }
+      }
+
       const saved = await saveFlashcardBook({
         name: newBookName,
         category: addingBookCategory,
+        grade: newBookGrade,
+        coverDriveFileId,
+        coverUrl,
+        coverEmbedUrl,
         createdBy: username,
       });
       setFlashcardBooks((prev) => [...prev, saved]);
-      setNewBookName('');
-      setAddingBookCategory(null);
+      setIsBookModalOpen(false);
     } catch (err) {
-      alert(err.message || 'Không thể thêm đầu sách.');
+      setBookModalError(err.message || 'Không thể tạo thư mục sách.');
     } finally {
       setIsSavingBook(false);
     }
   };
 
-  const handleDeleteBook = async (book, deckCount) => {
+  const handleDeleteBook = async (book, deckCount, e) => {
+    if (e) e.stopPropagation();
     if (!isAdmin || deckCount > 0) return;
-    if (!window.confirm(`Xóa đầu sách "${book.name}"?`)) return;
+    if (!window.confirm(`Xóa thư mục sách "${book.name}"?`)) return;
     await deleteFlashcardBook(book.id);
     setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
+    if (selectedBookFolder?.id === book.id) {
+      setSelectedBookFolder(null);
+    }
   };
 
   // Tải & nén ảnh bìa sách (dành cho Admin)
@@ -444,6 +506,15 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const globalSuccessBooks = getCategoryBooks('global_success');
   const extendedBooks = getCategoryBooks('extended');
 
+  const activeBookFolder = selectedBookFolder
+    ? [...globalSuccessBooks, ...extendedBooks].find(
+        (b) =>
+          b.id === selectedBookFolder.id ||
+          (b.category === selectedBookFolder.category &&
+            b.name.toLowerCase() === selectedBookFolder.name.toLowerCase())
+      ) || selectedBookFolder
+    : null;
+
   const renderLibrarySection = ({
     title,
     subtitle,
@@ -452,186 +523,119 @@ export default function FlashcardView({ currentUser: propsUser }) {
     category,
     books,
     emptyBookHint,
-    addUnitLabel,
   }) => (
     <section className="space-y-3.5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`p-2 rounded-xl border shrink-0 ${accentClass}`}>
-            <SectionIcon className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
-              {title}
-            </h2>
-            <p className="text-xs text-slate-400 truncate">{subtitle}</p>
-          </div>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`p-2 rounded-xl border shrink-0 ${accentClass}`}>
+          <SectionIcon className="w-4 h-4" />
         </div>
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => {
-              setAddingBookCategory((prev) => (prev === category ? null : category));
-              setNewBookName('');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer self-start sm:self-auto shrink-0"
-          >
-            <FolderPlus className="w-3.5 h-3.5" />
-            <span>Thêm sách</span>
-          </button>
-        )}
+        <div className="min-w-0">
+          <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
+            {title}
+          </h2>
+          <p className="text-xs text-slate-400 truncate">{subtitle}</p>
+        </div>
       </div>
-
-      {isAdmin && addingBookCategory === category && (
-        <form
-          onSubmit={handleAddBook}
-          className="p-3 rounded-2xl glass-card border border-purple-500/30 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-        >
-          <input
-            type="text"
-            required
-            value={newBookName}
-            onChange={(e) => setNewBookName(e.target.value)}
-            placeholder={
-              category === 'global_success'
-                ? 'Tên sách (VD: Global Success 10, Global Success 12...)'
-                : 'Tên sách mở rộng (VD: IELTS Vocabulary, 3000 từ Oxford...)'
-            }
-            className="flex-1 px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-          />
-          <div className="flex items-center gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => setAddingBookCategory(null)}
-              className="px-3 py-2 rounded-xl glass-button text-xs font-semibold text-slate-300 cursor-pointer"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={isSavingBook || !newBookName.trim()}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
-            >
-              {isSavingBook ? 'Đang lưu...' : 'Lưu sách'}
-            </button>
-          </div>
-        </form>
-      )}
 
       {isLoading ? (
         <div className="p-6 rounded-2xl glass-card border border-white/10 text-center text-xs text-slate-400">
           <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1.5 text-purple-400" />
-          Đang tải danh sách bộ thẻ...
+          Đang tải danh sách thư mục sách...
         </div>
-      ) : books.length === 0 ? (
+      ) : !isAdmin && books.length === 0 ? (
         <div className="p-5 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-400">
           {emptyBookHint}
         </div>
       ) : (
-        <div className="space-y-4">
-          {books.map((book) => (
-            <div
-              key={book.id}
-              className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <BookOpen className="w-4 h-4 text-amber-300 shrink-0" />
-                  <h3 className="text-sm font-bold font-display text-white truncate">
-                    {book.name}
-                  </h3>
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-300 shrink-0">
-                    {book.decks.length} bộ thẻ
-                  </span>
-                </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+          {books.map((book) => {
+            const coverSrc =
+              book.coverUrl ||
+              (book.coverDriveFileId
+                ? `https://drive.google.com/thumbnail?id=${book.coverDriveFileId}&sz=w600`
+                : '');
+            const fallbackCoverSrc = book.coverDriveFileId
+              ? `https://lh3.googleusercontent.com/d/${book.coverDriveFileId}=w600`
+              : '';
 
-                {isAdmin && book.decks.length === 0 && !String(book.id).startsWith('book-gs-') && !String(book.id).startsWith('auto-') && (
+            return (
+              <div
+                key={book.id}
+                onClick={() => setSelectedBookFolder(book)}
+                className="aspect-square rounded-2xl glass-card border border-white/10 hover:border-purple-400/60 cursor-pointer transition-all relative overflow-hidden group flex flex-col justify-between"
+              >
+                {coverSrc ? (
+                  <>
+                    <img
+                      src={coverSrc}
+                      alt={book.name}
+                      onError={(e) => {
+                        if (fallbackCoverSrc && e.currentTarget.src !== fallbackCoverSrc) {
+                          e.currentTarget.src = fallbackCoverSrc;
+                        } else {
+                          e.currentTarget.style.display = 'none';
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/15" />
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center pt-4">
+                    <span className="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-400/25 text-purple-300 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Folder className="w-6 h-6" />
+                    </span>
+                  </div>
+                )}
+
+                {isAdmin && book.decks.length === 0 && !String(book.id).startsWith('auto-') && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteBook(book, book.decks.length)}
-                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 cursor-pointer shrink-0"
-                    title="Xóa đầu sách trống"
+                    onClick={(e) => handleDeleteBook(book, book.decks.length, e)}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-black/50 text-rose-300 hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    title="Xóa thư mục sách trống"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
-              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {book.decks.map((deck) => (
+                <div className="relative z-10 p-3 mt-auto">
+                  <h3
+                    className={`text-xs sm:text-sm font-bold line-clamp-2 font-display ${
+                      coverSrc ? 'text-white drop-shadow' : 'text-white group-hover:text-purple-300 transition-colors'
+                    }`}
+                  >
+                    {book.name}
+                  </h3>
                   <div
-                    key={deck.id}
-                    onClick={() => handleSelectDeck(deck.id)}
-                    className="relative p-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-400/50 hover:bg-purple-500/10 cursor-pointer transition-all flex flex-col justify-between gap-2.5 min-h-[124px] group"
+                    className={`flex items-center justify-between text-[11px] mt-1 ${
+                      coverSrc ? 'text-slate-200' : 'text-slate-400'
+                    }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      {deck.coverImage ? (
-                        <img
-                          src={deck.coverImage}
-                          alt={deck.title}
-                          className="w-9 h-11 rounded-lg object-cover border border-white/15 shrink-0"
-                        />
-                      ) : (
-                        <div className="w-9 h-11 rounded-lg bg-purple-500/15 border border-purple-400/25 flex items-center justify-center shrink-0 text-purple-300">
-                          <Layers className="w-4 h-4" />
-                        </div>
-                      )}
-
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteDeck(deck, e)}
-                          className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          title="Xóa bộ thẻ"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 group-hover:text-purple-300 transition-colors font-display">
-                        {deck.title}
-                      </h4>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                        <span>{deck.cards?.length || 0} thẻ</span>
-                        <span className="text-purple-300 font-semibold">Học →</span>
-                      </div>
-                    </div>
+                    <span className="truncate">{book.grade || `${book.decks.length} bộ thẻ`}</span>
+                    {book.grade && <span className="shrink-0">{book.decks.length} bộ</span>}
                   </div>
-                ))}
-
-                {/* Admin: Khung vuông dấu + ngay dưới tên sách */}
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openCreateModal('textbook', {
-                        category,
-                        bookName: book.name,
-                      })
-                    }
-                    className="aspect-square min-h-[124px] rounded-2xl border-2 border-dashed border-purple-400/35 hover:border-purple-400 bg-purple-500/[0.04] hover:bg-purple-500/10 flex flex-col items-center justify-center gap-2 p-3 transition-all cursor-pointer group"
-                    title={`${addUnitLabel} cho ${book.name}`}
-                  >
-                    <span className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-400/30 text-purple-300 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Plus className="w-5 h-5" />
-                    </span>
-                    <span className="text-xs font-bold text-purple-300 text-center">
-                      {addUnitLabel}
-                    </span>
-                  </button>
-                )}
-
-                {!isAdmin && book.decks.length === 0 && (
-                  <div className="col-span-full py-4 text-center text-xs text-slate-400">
-                    Chưa có bài học nào trong sách "{book.name}".
-                  </div>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+
+          {/* Admin: Ô vuông dấu + tạo thư mục sách (tự động dịch chuyển sang phải sau mỗi thư mục vừa tạo) */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => openCreateBookModal(category)}
+              className="aspect-square rounded-2xl border-2 border-dashed border-purple-400/40 hover:border-purple-400 bg-purple-500/[0.04] hover:bg-purple-500/10 flex flex-col items-center justify-center gap-2 p-3 transition-all cursor-pointer group"
+              title="Tạo thư mục sách mới"
+            >
+              <span className="w-11 h-11 rounded-2xl bg-purple-500/20 border border-purple-400/30 text-purple-300 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Plus className="w-6 h-6" />
+              </span>
+              <span className="text-xs font-bold text-purple-300 text-center">
+                Tạo thư mục
+              </span>
+            </button>
+          )}
         </div>
       )}
     </section>
@@ -642,7 +646,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
       {/* 1. Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-3 min-w-0">
-          {currentDeck && (
+          {currentDeck ? (
             <button
               type="button"
               onClick={() => {
@@ -652,18 +656,44 @@ export default function FlashcardView({ currentUser: propsUser }) {
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl glass-button text-xs font-semibold text-slate-200 hover:text-white cursor-pointer shrink-0"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Danh sách</span>
+              <span>Quay lại</span>
             </button>
-          )}
+          ) : activeBookFolder ? (
+            <button
+              type="button"
+              onClick={() => setSelectedBookFolder(null)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl glass-button text-xs font-semibold text-slate-200 hover:text-white cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Quay lại</span>
+            </button>
+          ) : null}
+
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-extrabold font-display tracking-tight text-white truncate">
-              {currentDeck ? currentDeck.title : 'Thẻ Ghi Nhớ Từ Vựng Tiếng Anh'}
+              {currentDeck
+                ? currentDeck.title
+                : activeBookFolder
+                ? activeBookFolder.name
+                : 'Thẻ Ghi Nhớ Từ Vựng Tiếng Anh'}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5 truncate">
               {currentDeck
                 ? [currentDeck.bookName || currentDeck.unit, currentDeck.grade, `${currentCards.length} thẻ`]
                     .filter(Boolean)
                     .join(' • ')
+                : activeBookFolder
+                ? [
+                    activeBookFolder.category === 'extended'
+                      ? 'Mở rộng'
+                      : 'Bộ sách giáo khoa Global Success',
+                    activeBookFolder.grade,
+                    `${activeBookFolder.decks.length} bộ thẻ`,
+                  ]
+                    .filter(Boolean)
+                    .join(' • ')
+                : isAdmin
+                ? 'Quản lý thư mục sách Global Success và Mở rộng'
                 : 'Bộ sách giáo khoa Global Success, tài liệu mở rộng và bộ thẻ cá nhân'}
             </p>
           </div>
@@ -686,135 +716,207 @@ export default function FlashcardView({ currentUser: propsUser }) {
               </span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => openCreateModal('personal')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/25 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Tạo Bộ Thẻ Mới</span>
-          </button>
+          {!isAdmin && (
+            <button
+              type="button"
+              onClick={() => openCreateModal('personal')}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/25 hover:scale-[1.02] transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tạo Bộ Thẻ Mới</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 2A. TRANG TỔNG QUAN 3 PHẦN (KHI CHƯA CHỌN BỘ THẺ) */}
-      {!currentDeck ? (
+      {/* 2A. TRANG TỔNG QUAN (KHI CHƯA CHỌN THƯ MỤC SÁCH VÀ CHƯA CHỌN BỘ THẺ) */}
+      {!currentDeck && !activeBookFolder ? (
         <div className="space-y-7">
           {/* Phần 1 (trên): Bộ sách giáo khoa Global Success */}
           {renderLibrarySection({
             title: 'Bộ sách giáo khoa Global Success',
-            subtitle: isAdmin
-              ? 'Nhấn vào ô dấu + dưới mỗi cuốn sách để tạo bộ thẻ flashcard theo từng Unit'
-              : 'Chọn Unit trong bộ sách giáo khoa Global Success để học từ vựng',
+            subtitle: 'Chọn Unit trong bộ sách giáo khoa Global Success để học từ vựng',
             icon: BookOpen,
             accentClass: 'bg-amber-500/15 border-amber-400/30 text-amber-300',
             category: 'global_success',
             books: globalSuccessBooks,
-            emptyBookHint: 'Chưa có sách nào trong Bộ sách giáo khoa Global Success.',
-            addUnitLabel: 'Thêm Unit',
+            emptyBookHint: 'Chưa có thư mục sách giáo khoa Global Success nào.',
           })}
 
           {/* Phần 2 (dưới): Mở rộng */}
           {renderLibrarySection({
             title: 'Mở rộng',
-            subtitle: isAdmin
-              ? 'Nhấn vào ô dấu + dưới mỗi cuốn sách để tạo bộ thẻ flashcard mở rộng'
-              : 'Các bộ từ vựng mở rộng giúp nâng cao vốn từ Tiếng Anh',
+            subtitle: 'Các bộ từ vựng mở rộng giúp nâng cao vốn từ Tiếng Anh',
             icon: Sparkles,
             accentClass: 'bg-indigo-500/15 border-indigo-400/30 text-indigo-300',
             category: 'extended',
             books: extendedBooks,
-            emptyBookHint: isAdmin
-              ? 'Chưa có sách mở rộng nào. Nhấn "Thêm sách" để tạo đầu sách mới.'
-              : 'Chưa có bộ thẻ mở rộng nào.',
-            addUnitLabel: 'Thêm bộ thẻ',
+            emptyBookHint: 'Chưa có thư mục sách mở rộng nào.',
           })}
 
-          {/* Phần 3: Bộ thẻ cá nhân */}
-          <section className="space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-2 rounded-xl border bg-cyan-500/15 border-cyan-400/30 text-cyan-300 shrink-0">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
-                      Bộ thẻ cá nhân
-                    </h2>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
-                      {personalDecks.length}
-                    </span>
+          {/* Phần 3 (chỉ hiển thị cho tài khoản người dùng/học): Bộ thẻ cá nhân */}
+          {!isAdmin && (
+            <section className="space-y-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-2 rounded-xl border bg-cyan-500/15 border-cyan-400/30 text-cyan-300 shrink-0">
+                    <Layers className="w-4 h-4" />
                   </div>
-                  <p className="text-xs text-slate-400 truncate">
-                    Lưu trữ riêng tất cả bộ thẻ do tài khoản @{username} tự tạo
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base sm:text-lg font-extrabold font-display text-white truncate">
+                        Bộ thẻ cá nhân
+                      </h2>
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
+                        {personalDecks.length}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate">
+                      Lưu trữ riêng tất cả bộ thẻ do tài khoản @{username} tự tạo
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => openCreateModal('personal')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer self-start sm:self-auto shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tạo bộ thẻ mới</span>
-              </button>
-            </div>
-
-            {personalDecks.length === 0 ? (
-              <div className="p-6 rounded-2xl border border-dashed border-white/10 text-center space-y-2.5">
-                <p className="text-xs sm:text-sm text-slate-400">
-                  Bạn chưa có bộ thẻ cá nhân nào. Tạo bằng cách nhập thủ công hoặc đưa tệp PDF / TXT để AI tạo.
-                </p>
                 <button
                   type="button"
                   onClick={() => openCreateModal('personal')}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white cursor-pointer self-start sm:self-auto shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Tạo Bộ Thẻ Mới</span>
+                  <span>Tạo bộ thẻ mới</span>
                 </button>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {personalDecks.map((deck) => (
-                  <div
-                    key={deck.id}
-                    onClick={() => handleSelectDeck(deck.id)}
-                    className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-cyan-400/50 cursor-pointer transition-all flex flex-col justify-between gap-2.5 min-h-[116px] group"
+
+              {personalDecks.length === 0 ? (
+                <div className="p-6 rounded-2xl border border-dashed border-white/10 text-center space-y-2.5">
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    Bạn chưa có bộ thẻ cá nhân nào. Tạo bằng cách nhập thủ công hoặc đưa tệp PDF / TXT để AI tạo.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openCreateModal('personal')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold cursor-pointer"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
-                        {deck.creationMethod === 'ai' ? 'AI tạo' : 'Tự nhập'}
-                      </span>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tạo Bộ Thẻ Mới</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                  {personalDecks.map((deck) => (
+                    <div
+                      key={deck.id}
+                      onClick={() => handleSelectDeck(deck.id)}
+                      className="p-3.5 rounded-2xl glass-card border border-white/10 hover:border-cyan-400/50 cursor-pointer transition-all flex flex-col justify-between gap-2.5 min-h-[116px] group"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
+                          {deck.creationMethod === 'ai' ? 'AI tạo' : 'Tự nhập'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteDeck(deck, e)}
+                          className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          title="Xóa bộ thẻ cá nhân"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 group-hover:text-cyan-300 transition-colors font-display">
+                          {deck.title}
+                        </h4>
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                          <span>{deck.cards?.length || 0} thẻ</span>
+                          <span className="text-cyan-300 font-semibold">Học →</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      ) : !currentDeck && activeBookFolder ? (
+        /* 2B. BÊN TRONG THƯ MỤC SÁCH: DANH SÁCH CÁC UNIT / BỘ THẺ */
+        <div className="space-y-4">
+          {!isAdmin && activeBookFolder.decks.length === 0 ? (
+            <div className="p-8 rounded-2xl border border-dashed border-white/10 text-center text-xs sm:text-sm text-slate-400">
+              Chưa có bộ thẻ nào trong "{activeBookFolder.name}".
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+              {activeBookFolder.decks.map((deck) => (
+                <div
+                  key={deck.id}
+                  onClick={() => handleSelectDeck(deck.id)}
+                  className="aspect-square p-3.5 rounded-2xl glass-card border border-white/10 hover:border-purple-400/60 cursor-pointer transition-all flex flex-col justify-between gap-2.5 group"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    {deck.coverImage ? (
+                      <img
+                        src={deck.coverImage}
+                        alt={deck.title}
+                        className="w-10 h-12 rounded-lg object-cover border border-white/15 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-400/25 flex items-center justify-center shrink-0 text-purple-300">
+                        <Layers className="w-4 h-4" />
+                      </div>
+                    )}
+
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={(e) => handleDeleteDeck(deck, e)}
                         className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                        title="Xóa bộ thẻ cá nhân"
+                        title="Xóa bộ thẻ"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    </div>
+                    )}
+                  </div>
 
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 group-hover:text-cyan-300 transition-colors font-display">
-                        {deck.title}
-                      </h4>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                        <span>{deck.cards?.length || 0} thẻ</span>
-                        <span className="text-cyan-300 font-semibold">Học →</span>
-                      </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 group-hover:text-purple-300 transition-colors font-display">
+                      {deck.title}
+                    </h4>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
+                      <span>{deck.cards?.length || 0} thẻ</span>
+                      <span className="text-purple-300 font-semibold">Học →</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
+                </div>
+              ))}
+
+              {/* Admin: Ô vuông dấu + tạo bộ thẻ theo Unit / cuốn sách */}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openCreateModal('textbook', {
+                      category: activeBookFolder.category || 'global_success',
+                      bookName: activeBookFolder.name,
+                      grade: activeBookFolder.grade || '',
+                    })
+                  }
+                  className="aspect-square rounded-2xl border-2 border-dashed border-purple-400/40 hover:border-purple-400 bg-purple-500/[0.04] hover:bg-purple-500/10 flex flex-col items-center justify-center gap-2 p-3 transition-all cursor-pointer group"
+                >
+                  <span className="w-11 h-11 rounded-2xl bg-purple-500/20 border border-purple-400/30 text-purple-300 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Plus className="w-6 h-6" />
+                  </span>
+                  <span className="text-xs font-bold text-purple-300 text-center">
+                    {activeBookFolder.category === 'extended' ? 'Thêm bộ thẻ' : 'Thêm Unit'}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : (
-      /* 2B. CHẾ ĐỘ HỌC FLASHCARD (KHI ĐÃ CHỌN 1 BỘ THẺ) */
+      /* 2C. CHẾ ĐỘ HỌC FLASHCARD (KHI ĐÃ CHỌN 1 BỘ THẺ) */
       <div className="flex flex-col lg:flex-row items-start gap-5">
         {/* Left Column: Textbook Decks + Personal Decks (Scrollable) */}
         {!isDecksCollapsed && (
@@ -1561,6 +1663,158 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     <>
                       <Save className="w-3.5 h-3.5" />
                       <span>{createMethod === 'ai' ? 'Xuất & Lưu Bộ Thẻ' : 'Lưu Bộ Thẻ'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. MODAL TẠO THƯ MỤC SÁCH (ADMIN) */}
+      {isBookModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#111322] border border-slate-200 dark:border-white/20 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold font-display text-white">
+                  {addingBookCategory === 'extended'
+                    ? 'Tạo Thư Mục Sách Mở Rộng'
+                    : 'Tạo Thư Mục Sách Global Success'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Thư mục dùng để chứa các bộ thẻ flashcard của cuốn sách
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSavingBook && setIsBookModalOpen(false)}
+                className="p-2 rounded-xl glass-button text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddBook} className="p-6 space-y-4">
+              {bookModalError && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-semibold">
+                  {bookModalError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Tên sách *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBookName}
+                  onChange={(e) => setNewBookName(e.target.value)}
+                  placeholder={
+                    addingBookCategory === 'extended'
+                      ? 'VD: IELTS Vocabulary, 3000 từ Oxford...'
+                      : 'VD: Global Success 12'
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Khối (không bắt buộc)
+                </label>
+                <input
+                  type="text"
+                  value={newBookGrade}
+                  onChange={(e) => setNewBookGrade(e.target.value)}
+                  placeholder="VD: Khối 12"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Ảnh bìa sách dạng PDF hoặc ảnh (không bắt buộc, lưu Google Drive)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer truncate">
+                    <Upload className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">
+                      {newBookCoverFile ? newBookCoverFile.name : 'Chọn file PDF / ảnh bìa sách'}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/*"
+                      onChange={(e) => setNewBookCoverFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
+                  {newBookCoverFile && (
+                    <button
+                      type="button"
+                      onClick={() => setNewBookCoverFile(null)}
+                      className="p-2 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 cursor-pointer shrink-0"
+                      title="Bỏ chọn file"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {newBookCoverFile && !getSavedAppsScriptUrl() && showScriptConfig && (
+                <input
+                  type="url"
+                  value={appsScriptUrl}
+                  onChange={(e) => {
+                    setAppsScriptUrl(e.target.value);
+                    saveAppsScriptUrl(e.target.value);
+                  }}
+                  placeholder="Google Apps Script Web App URL (chỉ dán 1 lần)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                />
+              )}
+
+              {isSavingBook && newBookCoverFile && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300">
+                    <span>Đang lưu bìa sách lên Google Drive...</span>
+                    <span className="font-mono font-bold text-purple-300">{bookUploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 to-indigo-400 transition-all"
+                      style={{ width: `${bookUploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  disabled={isSavingBook}
+                  onClick={() => setIsBookModalOpen(false)}
+                  className="px-4 py-2 rounded-xl glass-button text-xs font-semibold text-slate-300 hover:text-white cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingBook || !newBookName.trim()}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingBook ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang tạo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Tạo Thư Mục</span>
                     </>
                   )}
                 </button>
