@@ -8,6 +8,31 @@ import {
   where
 } from 'firebase/firestore';
 import { db } from './firebase';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+/**
+ * Trích xuất trang đầu tiên của file PDF thành ảnh JPEG gọn nhẹ để làm ảnh bìa sách
+ */
+export async function renderPdfCoverToDataUrl(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const page = await pdf.getPage(1);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const maxSide = 480;
+  const scale = maxSide / Math.max(baseViewport.width, baseViewport.height);
+  const viewport = page.getViewport({ scale });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext('2d');
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
 
 const TEXTBOOK_DECKS_COLLECTION = 'textbook_flashcard_decks';
 const USER_DECKS_COLLECTION = 'user_flashcard_decks';
@@ -54,6 +79,7 @@ export async function saveFlashcardBook({
   coverUrl = '',
   coverEmbedUrl = '',
   coverType = '',
+  coverImage = '',
   createdBy = 'admin',
 }) {
   const cleanName = String(name || '').trim();
@@ -71,6 +97,7 @@ export async function saveFlashcardBook({
     coverUrl: coverUrl || '',
     coverEmbedUrl: coverEmbedUrl || '',
     coverType: coverType || '',
+    coverImage: coverImage || '',
     createdBy,
     createdAt: new Date().toISOString(),
   };

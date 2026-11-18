@@ -38,6 +38,8 @@ import {
   fetchUserFlashcardDecks,
   saveUserFlashcardDeck,
   deleteUserFlashcardDeck,
+  compressCoverImage,
+  renderPdfCoverToDataUrl,
   generateFlashcardsFromDocument
 } from '../../services/flashcardService';
 
@@ -306,6 +308,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
       let coverUrl = editingBook?.coverUrl || '';
       let coverEmbedUrl = editingBook?.coverEmbedUrl || '';
       let coverType = editingBook?.coverType || '';
+      let coverImage = editingBook?.coverImage || '';
 
       if (newBookCoverFile) {
         const ext = newBookCoverFile.name.split('.').pop()?.toLowerCase() || '';
@@ -316,14 +319,21 @@ export default function FlashcardView({ currentUser: propsUser }) {
           return;
         }
 
-        const driveRes = await uploadFileToGoogleDrive({
-          file: newBookCoverFile,
-          title: newBookName.trim(),
-          subject: 'Tiếng Anh',
-          folderName: `Flashcard - ${newBookName.trim()}`,
-          appsScriptUrl,
-          onProgress: (pct) => setBookUploadProgress(pct),
-        });
+        const [previewDataUrl, driveRes] = await Promise.all([
+          isPdf
+            ? renderPdfCoverToDataUrl(newBookCoverFile).catch(() => '')
+            : compressCoverImage(newBookCoverFile).catch(() => ''),
+          uploadFileToGoogleDrive({
+            file: newBookCoverFile,
+            title: newBookName.trim(),
+            subject: 'Tiếng Anh',
+            folderName: `Flashcard - ${newBookName.trim()}`,
+            appsScriptUrl,
+            onProgress: (pct) => setBookUploadProgress(pct),
+          }),
+        ]);
+
+        coverImage = previewDataUrl || '';
         coverDriveFileId = driveRes.driveFileId || '';
         coverEmbedUrl = driveRes.embedUrl || '';
         coverType = isPdf ? 'pdf' : 'image';
@@ -343,6 +353,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
         coverUrl,
         coverEmbedUrl,
         coverType,
+        coverImage,
         createdBy: username,
       });
 
@@ -625,21 +636,16 @@ export default function FlashcardView({ currentUser: propsUser }) {
           {books.map((book) => {
             const driveId = book.coverDriveFileId;
             const isPdfCover = book.coverType === 'pdf';
-            const coverSrc =
+            const driveImageSrc =
               !isPdfCover && driveId
                 ? `https://drive.usercontent.google.com/download?id=${driveId}&export=view&confirm=t`
                 : book.coverUrl ||
                   (driveId ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w600` : '');
+            const coverSrc = book.coverImage || driveImageSrc;
             const fallbackCoverSrc = driveId
               ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w600`
               : '';
-            const embedFallbackUrl =
-              book.coverEmbedUrl ||
-              (driveId ? `https://drive.google.com/file/d/${driveId}/preview` : '');
-            const imgFailed = Boolean(failedCoverIds[book.id]);
-            const showImage = Boolean(coverSrc) && !imgFailed;
-            const showPdfIframe = !showImage && Boolean(embedFallbackUrl);
-            const hasCover = showImage || showPdfIframe;
+            const hasCover = Boolean(coverSrc) && !failedCoverIds[book.id];
 
             return (
               <div
@@ -649,7 +655,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   hasCover ? 'dark-surface' : ''
                 }`}
               >
-                {showImage ? (
+                {hasCover ? (
                   <>
                     <img
                       src={coverSrc}
@@ -663,17 +669,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                       }}
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
-                  </>
-                ) : showPdfIframe ? (
-                  <>
-                    <iframe
-                      title={book.name}
-                      src={embedFallbackUrl}
-                      loading="lazy"
-                      className="absolute inset-0 w-full h-full border-0 pointer-events-none bg-slate-900"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
                   </>
                 ) : (
                   <div className="flex-1 flex items-center justify-center pt-4">
@@ -712,15 +708,14 @@ export default function FlashcardView({ currentUser: propsUser }) {
                       hasCover ? 'text-white drop-shadow' : 'text-white group-hover:text-purple-300 transition-colors'
                     }`}
                   >
-                    {book.name}
+                    {[book.name, book.grade].filter(Boolean).join(' ')}
                   </h3>
                   <div
-                    className={`flex items-center justify-between text-[11px] mt-1 ${
+                    className={`text-[11px] mt-0.5 ${
                       hasCover ? 'text-slate-200' : 'text-slate-400'
                     }`}
                   >
-                    <span className="truncate">{book.grade || `${book.decks.length} bộ thẻ`}</span>
-                    {book.grade && <span className="shrink-0">{book.decks.length} bộ</span>}
+                    {book.decks.length} bộ thẻ
                   </div>
                 </div>
               </div>
