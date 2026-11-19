@@ -934,10 +934,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
             >
               <PanelLeftOpen className="w-3.5 h-3.5 text-purple-300 group-hover:scale-105 transition-transform" />
               <span className="text-xs font-bold text-slate-200 font-display">
-                Bộ thẻ
-              </span>
-              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono leading-none">
-                {textbookDecks.length + personalDecks.length}
+                Danh sách bộ thẻ
               </span>
             </button>
           )}
