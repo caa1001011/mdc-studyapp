@@ -174,9 +174,9 @@ export function ConfirmDeleteProvider({ children }) {
         </div>
       )}
 
-      {/* Thanh thông báo Hoàn tác 3 giây */}
+      {/* Thanh thông báo Hoàn tác 3 giây (nằm phía trên thanh điều hướng dưới cùng trên điện thoại) */}
       {undoToast && (
-        <div className="fixed bottom-5 right-5 z-[80] w-[calc(100%-2.5rem)] max-w-sm rounded-2xl bg-white dark:bg-[#17192e] border border-slate-200 dark:border-purple-400/30 shadow-2xl overflow-hidden">
+        <div className="fixed bottom-20 lg:bottom-5 left-3 right-3 sm:left-auto sm:right-5 z-[80] sm:w-full max-w-sm mx-auto sm:mx-0 rounded-2xl bg-white dark:bg-[#17192e] border border-slate-200 dark:border-purple-400/30 shadow-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="w-7 h-7 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-500 dark:text-rose-400 flex items-center justify-center shrink-0">

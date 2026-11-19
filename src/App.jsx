@@ -20,6 +20,7 @@ export default function App() {
   // Duy trì trạng thái đăng nhập: Khi refresh trang sẽ giữ nguyên tài khoản, chỉ đăng xuất khi bấm nút Đăng xuất
   const [currentUser, setCurrentUser] = useState(() => getSessionUser());
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Theme State cho Trang Chủ sau khi đăng nhập: 'dark' (mặc định) hoặc 'light'
   const [theme, setTheme] = useState(() => {
@@ -37,18 +38,27 @@ export default function App() {
   // - Nếu đã đăng nhập: Áp dụng theo theme người dùng chọn
   useEffect(() => {
     const root = document.documentElement;
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (!currentUser) {
       root.classList.remove('dark');
+      if (themeMeta) themeMeta.setAttribute('content', '#f1f5f9');
       return;
     }
 
     if (theme === 'dark') {
       root.classList.add('dark');
+      if (themeMeta) themeMeta.setAttribute('content', '#0b0d17');
     } else {
       root.classList.remove('dark');
+      if (themeMeta) themeMeta.setAttribute('content', '#ffffff');
     }
     localStorage.setItem('lumina_theme', theme);
   }, [theme, currentUser]);
+
+  // Cuộn lên đầu trang khi chuyển tab (tối ưu trải nghiệm trên điện thoại)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeTab]);
 
   // Cơ chế giấu đường dẫn (URL Masking)
   useEffect(() => {
@@ -86,7 +96,7 @@ export default function App() {
       case 'flashcards':
         return <FlashcardView currentUser={currentUser} />;
       case 'quiz':
-        return <QuizReviewView />;
+        return <QuizReviewView currentUser={currentUser} />;
       case 'games':
         return <GamificationView />;
       case 'users':
@@ -111,27 +121,32 @@ export default function App() {
       {/* 1. Global Ambient Glow Background (Tự thích ứng theo Dark / Light Mode) */}
       <AuroraBackground theme={theme} />
 
-      {/* 2. Top Navigation Bar (Tích hợp Nút chuyển đổi Sáng / Tối & Đăng xuất) */}
+      {/* 2. Top Navigation Bar (Tích hợp Nút Menu Mobile, Sáng / Tối & Đăng xuất) */}
       <Navbar
         activeTab={activeTab}
         theme={theme}
         setTheme={setTheme}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
       />
 
-      {/* 3. Main Desktop Layout Container */}
+      {/* 3. Main Responsive Layout Container */}
       <div className="max-w-[1720px] mx-auto flex">
-        {/* Desktop Fixed Left Sidebar */}
+        {/* Desktop Sidebar + Mobile Drawer & Bottom Navigation */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           theme={theme}
           currentUser={currentUser}
+          isMobileOpen={isMobileMenuOpen}
+          onOpenMobile={() => setIsMobileMenuOpen(true)}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
+          onLogout={handleLogout}
         />
 
-        {/* Desktop Expansive Main Stage */}
-        <main className="flex-1 min-w-0 px-6 lg:px-10 py-6 pb-16">
+        {/* Main Stage (tối ưu padding cho điện thoại và chừa khoảng cho Bottom Bar) */}
+        <main className="flex-1 min-w-0 px-3 sm:px-6 lg:px-10 py-4 sm:py-6 pb-24 lg:pb-16">
           <Suspense fallback={<PageLoading />}>
             {renderView()}
           </Suspense>

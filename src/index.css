@@ -640,3 +640,39 @@ html:not(.dark) .breathing-glow {
   30% { transform: translate(100%, 100%) rotate(30deg); }
   100% { transform: translate(100%, 100%) rotate(30deg); }
 }
+
+/* ================= MOBILE & TOUCH EXPERIENCE OPTIMIZATIONS ================= */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Mượt cuộn ngang trên bảng & danh sách tab di động */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tắt hiệu ứng giật hover trên thiết bị cảm ứng */
+@media (hover: none) {
+  .glass-card:hover,
+  .glass-button:hover {
+    transform: none;
+  }
+}
+
+/* Chống tự động zoom trên iOS Safari khi bấm vào ô nhập liệu nhỏ hơn 16px */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}

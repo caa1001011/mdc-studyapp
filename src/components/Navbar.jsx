@@ -5,11 +5,19 @@ import {
   Minimize2,
   Sun,
   Moon,
-  LogOut
+  LogOut,
+  Menu
 } from 'lucide-react';
 import { USER_PROFILE } from '../data/mockData';
 
-export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogout }) {
+export default function Navbar({
+  activeTab,
+  theme,
+  setTheme,
+  currentUser,
+  onLogout,
+  onOpenMobileMenu
+}) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -61,28 +69,39 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
   const displayAvatar = currentUser?.avatar || USER_PROFILE.avatar;
 
   return (
-    <header className={`sticky top-0 z-40 w-full border-b px-4 sm:px-6 lg:px-8 py-2 transition-all ${
+    <header className={`sticky top-0 z-40 w-full border-b px-3 sm:px-6 lg:px-8 py-2 transition-all ${
       isDark
-        ? 'bg-[#0b0d17] border-white/10'
-        : 'bg-white border-slate-200'
+        ? 'bg-[#0b0d17]/95 backdrop-blur-md border-white/10'
+        : 'bg-white/95 backdrop-blur-md border-slate-200'
     }`}>
-      <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-4">
-        {/* 1. Góc trên bên trái: CHỈ CÓ LOGO VÀ TÊN WEB APP */}
-        <div className="flex items-center gap-2.5 select-none flex-shrink-0">
-          <div className="w-8 h-8 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-white/20 bg-white/90 flex items-center justify-center p-0.5">
+      <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-2 sm:gap-4">
+        {/* 1. Góc trên bên trái: Nút mở Menu Mobile + Logo & Tên Web App */}
+        <div className="flex items-center gap-2 sm:gap-2.5 select-none flex-shrink-0 min-w-0">
+          {onOpenMobileMenu && (
+            <button
+              type="button"
+              onClick={onOpenMobileMenu}
+              className="lg:hidden w-9 h-9 rounded-xl glass-button flex items-center justify-center text-slate-700 dark:text-slate-200 cursor-pointer shrink-0"
+              aria-label="Mở danh mục điều hướng"
+              title="Danh mục"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+          <div className="w-8 h-8 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-white/20 bg-white/90 flex items-center justify-center p-0.5 shrink-0">
             <img 
               src="/logo.png" 
               alt="Beacon Learn Logo" 
               className="w-full h-full object-cover rounded-lg"
             />
           </div>
-          <span className="font-display font-bold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white">
+          <span className="font-display font-bold text-sm sm:text-lg tracking-tight text-slate-900 dark:text-white truncate">
             Beacon Learn
           </span>
         </div>
 
-        {/* 2. Giữa: Đồng hồ thời gian thực tinh tế, hiển thị ngày giờ trực quan */}
-        <div className="flex items-center justify-center flex-1 mx-2">
+        {/* 2. Giữa: Đồng hồ thời gian thực (ẩn trên điện thoại nhỏ để tránh chật chội) */}
+        <div className="hidden sm:flex items-center justify-center flex-1 mx-2">
           <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full glass-card border border-slate-200/90 dark:border-white/10 shadow-sm transition-all select-none">
             <div className="relative flex items-center justify-center">
               <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-purple-400" />
@@ -95,21 +114,22 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
               {formattedTime}
             </span>
 
-            <span className="text-slate-300 dark:text-white/20">|</span>
+            <span className="hidden md:inline text-slate-300 dark:text-white/20">|</span>
 
             {/* Ngày tháng */}
-            <span className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-300 capitalize">
+            <span className="hidden md:inline text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-300 capitalize">
               {formattedDate}
             </span>
           </div>
         </div>
 
         {/* 3. Góc phải: Nút Đổi giao diện, Toàn màn hình & Tài khoản */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {/* Nút chuyển đổi Giao diện Sáng / Tối */}
           <button
+            type="button"
             onClick={toggleTheme}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl glass-button text-xs font-semibold transition-all duration-200 cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 h-9 px-2.5 rounded-xl glass-button text-xs font-semibold transition-all duration-200 cursor-pointer ${
               isDark 
                 ? 'text-amber-300 hover:text-amber-200 border-amber-500/30 bg-amber-500/10' 
                 : 'text-indigo-600 hover:text-indigo-700 border-indigo-200 bg-white/90'
@@ -118,28 +138,29 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
           >
             {isDark ? (
               <>
-                <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '10s' }} />
+                <Sun className="w-4 h-4 text-amber-400 animate-spin" style={{ animationDuration: '10s' }} />
                 <span className="hidden md:inline">Giao diện Sáng</span>
               </>
             ) : (
               <>
-                <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                <Moon className="w-4 h-4 text-indigo-600" />
                 <span className="hidden md:inline">Giao diện Tối</span>
               </>
             )}
           </button>
 
-          {/* Nút bật / tắt toàn màn hình */}
+          {/* Nút bật / tắt toàn màn hình (chỉ hiển thị từ màn hình tablet/desktop) */}
           <button
+            type="button"
             onClick={toggleFullscreen}
-            className="w-8 h-8 rounded-xl glass-button flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="hidden sm:flex w-9 h-9 rounded-xl glass-button items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
             title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
           >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
 
           {/* Thông tin tài khoản người dùng */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-white/10">
+          <div className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-white/10">
             <img
               src={displayAvatar}
               alt={displayName}
@@ -157,11 +178,13 @@ export default function Navbar({ activeTab, theme, setTheme, currentUser, onLogo
             {/* Nút Đăng xuất */}
             {onLogout && (
               <button
+                type="button"
                 onClick={onLogout}
-                className="w-8 h-8 rounded-xl glass-button flex items-center justify-center text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-all cursor-pointer"
+                className="w-9 h-9 rounded-xl glass-button flex items-center justify-center text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-all cursor-pointer"
                 title="Đăng xuất"
+                aria-label="Đăng xuất"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             )}
           </div>
