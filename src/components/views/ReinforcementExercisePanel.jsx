@@ -4,8 +4,6 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Wand2,
-  Upload,
   Sparkles,
   Loader2,
   Save,
@@ -135,13 +133,6 @@ export default function ReinforcementExercisePanel({
   const [title, setTitle] = useState('');
   const [draftMc, setDraftMc] = useState([EMPTY_MC_QUESTION()]);
   const [draftTf, setDraftTf] = useState([EMPTY_TF_QUESTION()]);
-
-  // State AI tạo đề từ file / tài liệu (Tiếng Anh: 10 TN; môn khác: 8 TN + 2 Đ/S)
-  const [docText, setDocText] = useState('');
-  const [docFile, setDocFile] = useState(null);
-  const [aiMcCount, setAiMcCount] = useState(defaultAiMc);
-  const [aiTfCount, setAiTfCount] = useState(defaultAiTf);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreviewReady, setAiPreviewReady] = useState(false);
 
   const [editorError, setEditorError] = useState('');
@@ -190,8 +181,6 @@ export default function ReinforcementExercisePanel({
         setTitle(chosenLesson || `Bài tập củng cố ${subject?.name || ''}`);
         setDraftMc(result.mcQuestions || []);
         setDraftTf(result.tfQuestions || []);
-        setAiMcCount(defaultAiMc);
-        setAiTfCount(defaultAiTf);
         setAiPreviewReady(true);
         setEditorError('');
         setIsQuickAiOpen(false);
@@ -233,10 +222,6 @@ export default function ReinforcementExercisePanel({
     setTitle('');
     setDraftMc([EMPTY_MC_QUESTION()]);
     setDraftTf(isEnglish ? [] : [EMPTY_TF_QUESTION()]);
-    setDocText('');
-    setDocFile(null);
-    setAiMcCount(defaultAiMc);
-    setAiTfCount(defaultAiTf);
     setAiPreviewReady(false);
     setEditorError('');
     setIsEditorOpen(true);
@@ -263,69 +248,9 @@ export default function ReinforcementExercisePanel({
         ? exercise.tfQuestions.map((q, idx) => normalizeTfQuestion(q, idx))
         : []
     );
-    setDocText('');
-    setDocFile(null);
     setAiPreviewReady(false);
     setEditorError('');
     setIsEditorOpen(true);
-  };
-
-  const handleDocumentUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setEditorError('');
-
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isPlainText = ['txt', 'md', 'csv', 'rtf'].includes(ext) || file.type.startsWith('text/');
-
-    const reader = new FileReader();
-    if (isPlainText) {
-      reader.onload = (ev) => {
-        setDocText(String(ev.target?.result || ''));
-        setDocFile(null);
-      };
-      reader.readAsText(file, 'UTF-8');
-    } else {
-      reader.onload = (ev) => {
-        const dataUrl = String(ev.target?.result || '');
-        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-        const mimeMap = {
-          pdf: 'application/pdf',
-          doc: 'application/msword',
-          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        };
-        setDocFile({
-          name: file.name,
-          mimeType: file.type || mimeMap[ext] || 'application/octet-stream',
-          base64,
-        });
-      };
-      reader.readAsDataURL(file);
-    }
-    e.target.value = '';
-  };
-
-  const handleGenerateWithAI = async () => {
-    setEditorError('');
-    setIsGeneratingAI(true);
-    try {
-      const result = await generateReinforcementExerciseFromDocument({
-        text: docText,
-        fileData: docFile,
-        lessonTitle: title,
-        mcCount: aiMcCount,
-        tfCount: isEnglish ? 0 : aiTfCount,
-        subjectName: subject?.name || '',
-        isEnglish,
-      });
-      setDraftMc(result.mcQuestions || []);
-      setDraftTf(result.tfQuestions || []);
-      setAiPreviewReady(true);
-    } catch (err) {
-      setEditorError(err.message || 'Không thể tạo bài tập bằng AI.');
-    } finally {
-      setIsGeneratingAI(false);
-    }
   };
 
   const handleSaveExercise = async (e) => {
@@ -805,7 +730,7 @@ export default function ReinforcementExercisePanel({
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl glass-button border border-purple-400/30 text-purple-200 hover:text-white text-xs font-bold cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Tạo Thủ Công / Từ File</span>
+              <span>Tạo Thủ Công</span>
             </button>
           )}
         </div>
@@ -926,7 +851,9 @@ export default function ReinforcementExercisePanel({
                     : `Tạo Bài Tập Củng Cố • ${subject?.name}`}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Soạn thủ công hoặc đưa tài liệu bài học để AI tự tạo rồi xem trước và chỉnh sửa trước khi đăng
+                  {aiPreviewReady
+                    ? 'Xem trước và chỉnh sửa bộ câu hỏi AI vừa tạo trước khi đăng lên hệ thống'
+                    : 'Soạn thủ công câu hỏi trắc nghiệm 4 lựa chọn và câu hỏi Đúng / Sai'}
                 </p>
               </div>
               <button
@@ -961,130 +888,7 @@ export default function ReinforcementExercisePanel({
                 />
               </div>
 
-              {/* Chuyển đổi phương pháp: Thủ công | AI */}
-              <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.04] border border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setEditorMode('manual')}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    editorMode === 'manual'
-                      ? 'bg-purple-600/35 text-white border border-purple-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Tạo Thủ Công</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditorMode('ai')}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    editorMode === 'ai'
-                      ? 'bg-purple-600/35 text-white border border-purple-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Wand2 className="w-3.5 h-3.5" />
-                  <span>Đưa Tài Liệu Cho AI Tạo</span>
-                </button>
-              </div>
-
-              {/* Khu vực AI tạo đề từ file / tài liệu */}
-              {editorMode === 'ai' && (
-                <div className="p-4 rounded-2xl bg-white/[0.03] border border-purple-500/30 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                      <Wand2 className="w-3.5 h-3.5" />
-                      Tải file bài học (.pdf, .txt, .doc, .docx) hoặc dán nội dung để AI tạo đề xem trước
-                    </span>
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer shrink-0">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Chọn File Tài Liệu</span>
-                      <input
-                        type="file"
-                        accept=".pdf,.txt,.doc,.docx,.md,.csv,.rtf"
-                        onChange={handleDocumentUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {docFile && (
-                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-purple-500/15 border border-purple-400/30 text-xs text-purple-200">
-                      <span className="truncate font-semibold">Đã chọn tệp: {docFile.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setDocFile(null)}
-                        className="p-1 rounded-lg hover:bg-purple-500/30 cursor-pointer shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  <textarea
-                    rows={4}
-                    value={docText}
-                    onChange={(e) => setDocText(e.target.value)}
-                    placeholder="Dán nội dung lý thuyết bài học hoặc ngân hàng câu hỏi vào đây..."
-                    className="w-full p-3 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                  />
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-end">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                        Số câu trắc nghiệm
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={30}
-                        value={aiMcCount}
-                        onChange={(e) => setAiMcCount(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
-                    {!isEnglish && (
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Số câu Đúng/Sai
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={30}
-                          value={aiTfCount}
-                          onChange={(e) => setAiTfCount(Number(e.target.value))}
-                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleGenerateWithAI}
-                      disabled={isGeneratingAI || (!docText.trim() && !docFile && !title.trim())}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                    >
-                      {isGeneratingAI ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>AI đang tạo đề...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>AI Tạo Đề Xem Trước</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {editorMode === 'ai' && aiPreviewReady && (
+              {aiPreviewReady && (
                 <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-xs text-emerald-300 font-semibold">
                   ✓ AI đã tạo xem trước {draftMc.length} câu trắc nghiệm và {draftTf.length} câu Đúng/Sai. Hãy kiểm tra, chỉnh sửa trực tiếp bên dưới trước khi đăng lên hệ thống!
                 </div>
