@@ -49,6 +49,27 @@ const getSubItemLabel = (index) => `${String.fromCharCode(97 + (index % 26))})`;
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
+// Chấm điểm câu Đúng/Sai chuẩn (mỗi câu tối đa 1,0 điểm):
+// Đúng 1 ý: 0,1đ | Đúng 2 ý: 0,25đ | Đúng 3 ý: 0,5đ | Đúng cả 4 ý: 1,0đ
+function scoreTrueFalseQuestion(correctItems, totalItems) {
+  if (totalItems <= 0 || correctItems <= 0) return 0;
+  if (totalItems === 4) {
+    const table = [0, 0.1, 0.25, 0.5, 1.0];
+    return table[Math.min(4, correctItems)] ?? 0;
+  }
+  if (correctItems >= totalItems) return 1.0;
+  if (correctItems === 1) return 0.1;
+  if (correctItems === 2) return 0.25;
+  if (correctItems === 3) return 0.5;
+  return Number((correctItems / totalItems).toFixed(2));
+}
+
+function formatScore(val) {
+  return Number(Number(val || 0).toFixed(2))
+    .toString()
+    .replace('.', ',');
+}
+
 export default function ReinforcementExercisePanel({
   subject,
   exercises = [],
@@ -71,11 +92,11 @@ export default function ReinforcementExercisePanel({
   const [draftMc, setDraftMc] = useState([EMPTY_MC_QUESTION()]);
   const [draftTf, setDraftTf] = useState([EMPTY_TF_QUESTION()]);
 
-  // State AI tạo đề từ file / tài liệu
+  // State AI tạo đề từ file / tài liệu (mặc định chuẩn 8 trắc nghiệm + 2 đúng/sai)
   const [docText, setDocText] = useState('');
   const [docFile, setDocFile] = useState(null);
-  const [aiMcCount, setAiMcCount] = useState(5);
-  const [aiTfCount, setAiTfCount] = useState(5);
+  const [aiMcCount, setAiMcCount] = useState(8);
+  const [aiTfCount, setAiTfCount] = useState(2);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreviewReady, setAiPreviewReady] = useState(false);
@@ -91,8 +112,8 @@ export default function ReinforcementExercisePanel({
     setDraftTf([EMPTY_TF_QUESTION()]);
     setDocText('');
     setDocFile(null);
-    setAiMcCount(5);
-    setAiTfCount(5);
+    setAiMcCount(8);
+    setAiTfCount(2);
     setAiPreviewReady(false);
     setEditorError('');
     setIsEditorOpen(true);
@@ -298,20 +319,33 @@ export default function ReinforcementExercisePanel({
     const allTfItems = tfList.flatMap((q) => q.items || []);
     const totalCount = mcList.length + allTfItems.length;
 
-    let correctCount = 0;
+    let mcCorrectCount = 0;
+    let tfScore = 0;
+    const tfQuestionScores = {};
+
     if (isSubmitted) {
       mcList.forEach((q) => {
-        if (mcAnswers[q.id] === q.correctIndex) correctCount += 1;
+        if (mcAnswers[q.id] === q.correctIndex) mcCorrectCount += 1;
       });
-      allTfItems.forEach((item) => {
-        if (tfAnswers[item.id] === item.isTrue) correctCount += 1;
+      tfList.forEach((q) => {
+        const items = q.items || [];
+        let qCorrect = 0;
+        items.forEach((item) => {
+          if (tfAnswers[item.id] === item.isTrue) qCorrect += 1;
+        });
+        const qScore = scoreTrueFalseQuestion(qCorrect, items.length);
+        tfScore += qScore;
+        tfQuestionScores[q.id] = { correct: qCorrect, total: items.length, score: qScore };
       });
     }
+
+    const mcScore = mcCorrectCount * 1.0;
+    const totalScore = mcScore + tfScore;
+    const maxScore = mcList.length * 1.0 + tfList.length * 1.0;
 
     const answeredCount =
       mcList.filter((q) => mcAnswers[q.id] !== undefined).length +
       allTfItems.filter((item) => tfAnswers[item.id] !== undefined).length;
-    const score10 = totalCount > 0 ? ((correctCount / totalCount) * 10).toFixed(1) : '0.0';
 
     return (
       <div className="space-y-5">
@@ -339,9 +373,12 @@ export default function ReinforcementExercisePanel({
           </div>
 
           {isSubmitted ? (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
               <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-xs font-bold">
-                Điểm: {score10}/10 ({correctCount}/{totalCount} đúng)
+                Điểm: {formatScore(totalScore)} / {formatScore(maxScore)}
+                <span className="font-normal opacity-85 ml-1.5">
+                  (TN: {formatScore(mcScore)}đ • Đ/S: {formatScore(tfScore)}đ)
+                </span>
               </span>
               <button
                 type="button"
@@ -448,15 +485,24 @@ export default function ReinforcementExercisePanel({
             </h4>
 
             <div className="space-y-4">
-              {tfList.map((q, idx) => (
+              {tfList.map((q, idx) => {
+                const qStat = tfQuestionScores[q.id];
+                return (
                 <div
                   key={q.id || idx}
                   className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
                 >
-                  <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
-                    <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
-                    {q.prompt || 'Xét tính đúng/sai của các mệnh đề sau:'}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                      <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
+                      {q.prompt || 'Xét tính đúng/sai của các mệnh đề sau:'}
+                    </p>
+                    {isSubmitted && qStat && (
+                      <span className="px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[11px] font-bold shrink-0">
+                        +{formatScore(qStat.score)}đ ({qStat.correct}/{qStat.total} ý)
+                      </span>
+                    )}
+                  </div>
 
                   <div className="overflow-x-auto rounded-xl border border-white/10">
                     <table className="w-full text-left border-collapse">
@@ -552,7 +598,8 @@ export default function ReinforcementExercisePanel({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
