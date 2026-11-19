@@ -55,6 +55,8 @@ import {
   getSavedAppsScriptUrl,
   saveAppsScriptUrl
 } from '../../services/googleDriveService';
+import { fetchReinforcementExercises } from '../../services/exerciseService';
+import ReinforcementExercisePanel from './ReinforcementExercisePanel';
 
 const ICONS_MAP = {
   Calculator: Calculator,
@@ -143,6 +145,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
 
   // Lessons & Recent In-Progress Videos state
   const [allLessons, setAllLessons] = useState([]);
+  const [reinforcementExercises, setReinforcementExercises] = useState([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(true);
   const [lessonProgress, setLessonProgress] = useState({});
 
@@ -188,16 +191,18 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     async function loadInitialData() {
       setIsLoadingLessons(true);
       try {
-        const [lessons, progress, loadedFolders, savedScriptUrl, loadedRecent] = await Promise.all([
+        const [lessons, progress, loadedFolders, savedScriptUrl, loadedRecent, loadedExercises] = await Promise.all([
           fetchSubjectLessons(),
           fetchUserLessonProgress(username),
           fetchLessonFolders(),
           fetchAppsScriptUrl(),
           fetchUserRecentLessons(username),
+          fetchReinforcementExercises(),
         ]);
 
         if (!isCancelled) {
           setAllLessons(lessons);
+          setReinforcementExercises(loadedExercises || []);
           setLessonProgress(progress || {});
           setFolders(loadedFolders || []);
           setRecentLessons(Array.isArray(loadedRecent) ? loadedRecent.slice(0, 5) : []);
@@ -1038,9 +1043,10 @@ export default function StudySpaceView({ currentUser: propsUser }) {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {LESSON_SUBFEATURES.map((tab) => {
                 const TabIcon = tab.icon;
-                const tabCount = subjectLessons.filter(
-                  (l) => getLessonCategory(l) === tab.id
-                ).length;
+                const tabCount =
+                  tab.id === 'exercise'
+                    ? reinforcementExercises.filter((ex) => ex.subjectId === selectedSubject.id).length
+                    : subjectLessons.filter((l) => getLessonCategory(l) === tab.id).length;
                 const isActive = activeCategory === tab.id;
 
                 return (
@@ -1092,8 +1098,19 @@ export default function StudySpaceView({ currentUser: propsUser }) {
               })}
             </div>
 
-            {/* CẤP 1 CỦA VIDEO BÀI GIẢNG & SƠ ĐỒ TƯ DUY: DANH SÁCH THƯ MỤC BÀI HỌC */}
-            {usesFolders && !selectedFolder ? (
+            {/* BÀI TẬP CỦNG CỐ KIẾN THỨC: TẠO THỦ CÔNG / AI (TRẮC NGHIỆM 4 LỰA CHỌN + ĐÚNG/SAI) & LÀM BÀI */}
+            {activeCategory === 'exercise' ? (
+              <ReinforcementExercisePanel
+                subject={selectedSubject}
+                exercises={reinforcementExercises.filter(
+                  (ex) => ex.subjectId === selectedSubject.id
+                )}
+                isLoading={isLoadingLessons}
+                isAdmin={isAdmin}
+                username={username}
+                onExercisesChange={setReinforcementExercises}
+              />
+            ) : usesFolders && !selectedFolder ? (
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>

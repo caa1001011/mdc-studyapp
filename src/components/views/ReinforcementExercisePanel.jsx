@@ -1,0 +1,1073 @@
+import React, { useState } from 'react';
+import {
+  ClipboardCheck,
+  Plus,
+  Pencil,
+  Trash2,
+  Wand2,
+  Upload,
+  Sparkles,
+  Loader2,
+  Save,
+  X,
+  ArrowLeft,
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  ListChecks,
+  ToggleLeft
+} from 'lucide-react';
+import {
+  saveReinforcementExercise,
+  deleteReinforcementExercise,
+  generateReinforcementExerciseFromDocument
+} from '../../services/exerciseService';
+
+const EMPTY_MC_QUESTION = () => ({
+  id: `mc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  question: '',
+  options: ['', '', '', ''],
+  correctIndex: 0,
+  explanation: '',
+});
+
+const EMPTY_TF_QUESTION = () => ({
+  id: `tf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  statement: '',
+  isTrue: true,
+  explanation: '',
+});
+
+const OPTION_LABELS = ['A', 'B', 'C', 'D'];
+
+export default function ReinforcementExercisePanel({
+  subject,
+  exercises = [],
+  isLoading = false,
+  isAdmin = false,
+  username = 'student',
+  onExercisesChange,
+}) {
+  // Chế độ làm bài (người học & admin đều có thể mở làm thử)
+  const [activeExercise, setActiveExercise] = useState(null);
+  const [mcAnswers, setMcAnswers] = useState({});
+  const [tfAnswers, setTfAnswers] = useState({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Modal tạo / chỉnh sửa bài tập (chỉ dành cho Admin)
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingExercise, setEditingExercise] = useState(null);
+  const [editorMode, setEditorMode] = useState('manual'); // 'manual' | 'ai'
+  const [title, setTitle] = useState('');
+  const [draftMc, setDraftMc] = useState([EMPTY_MC_QUESTION()]);
+  const [draftTf, setDraftTf] = useState([EMPTY_TF_QUESTION()]);
+
+  // State AI tạo đề từ file / tài liệu
+  const [docText, setDocText] = useState('');
+  const [docFile, setDocFile] = useState(null);
+  const [aiMcCount, setAiMcCount] = useState(5);
+  const [aiTfCount, setAiTfCount] = useState(5);
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiPreviewReady, setAiPreviewReady] = useState(false);
+
+  const [editorError, setEditorError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const openCreateModal = () => {
+    setEditingExercise(null);
+    setEditorMode('manual');
+    setTitle('');
+    setDraftMc([EMPTY_MC_QUESTION()]);
+    setDraftTf([EMPTY_TF_QUESTION()]);
+    setDocText('');
+    setDocFile(null);
+    setAiMcCount(5);
+    setAiTfCount(5);
+    setAiPreviewReady(false);
+    setEditorError('');
+    setIsEditorOpen(true);
+  };
+
+  const openEditModal = (exercise, e) => {
+    if (e) e.stopPropagation();
+    setEditingExercise(exercise);
+    setEditorMode('manual');
+    setTitle(exercise.title || '');
+    setDraftMc(
+      Array.isArray(exercise.mcQuestions)
+        ? exercise.mcQuestions.map((q) => ({
+            ...EMPTY_MC_QUESTION(),
+            ...q,
+            options: Array.isArray(q.options)
+              ? [0, 1, 2, 3].map((i) => q.options[i] || '')
+              : ['', '', '', ''],
+          }))
+        : []
+    );
+    setDraftTf(
+      Array.isArray(exercise.tfQuestions)
+        ? exercise.tfQuestions.map((q) => ({ ...EMPTY_TF_QUESTION(), ...q }))
+        : []
+    );
+    setDocText('');
+    setDocFile(null);
+    setAiPreviewReady(false);
+    setEditorError('');
+    setIsEditorOpen(true);
+  };
+
+  const handleDocumentUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditorError('');
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isPlainText = ['txt', 'md', 'csv', 'rtf'].includes(ext) || file.type.startsWith('text/');
+
+    const reader = new FileReader();
+    if (isPlainText) {
+      reader.onload = (ev) => {
+        setDocText(String(ev.target?.result || ''));
+        setDocFile(null);
+      };
+      reader.readAsText(file, 'UTF-8');
+    } else {
+      reader.onload = (ev) => {
+        const dataUrl = String(ev.target?.result || '');
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        const mimeMap = {
+          pdf: 'application/pdf',
+          doc: 'application/msword',
+          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        };
+        setDocFile({
+          name: file.name,
+          mimeType: file.type || mimeMap[ext] || 'application/octet-stream',
+          base64,
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
+
+  const handleGenerateWithAI = async () => {
+    setEditorError('');
+    setIsGeneratingAI(true);
+    try {
+      const result = await generateReinforcementExerciseFromDocument(
+        {
+          text: docText,
+          fileData: docFile,
+          mcCount: aiMcCount,
+          tfCount: aiTfCount,
+          subjectName: subject?.name || '',
+        },
+        geminiApiKey
+      );
+      setDraftMc(result.mcQuestions || []);
+      setDraftTf(result.tfQuestions || []);
+      setAiPreviewReady(true);
+    } catch (err) {
+      setEditorError(err.message || 'Không thể tạo bài tập bằng AI.');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handleSaveExercise = async (e) => {
+    e.preventDefault();
+    setEditorError('');
+
+    if (!title.trim()) {
+      setEditorError('Vui lòng nhập tiêu đề bài tập củng cố.');
+      return;
+    }
+
+    const validMc = draftMc
+      .filter((q) => q.question.trim() && q.options.some((o) => o.trim()))
+      .map((q) => ({
+        ...q,
+        question: q.question.trim(),
+        options: q.options.map((o) => o.trim()),
+        explanation: (q.explanation || '').trim(),
+      }));
+
+    const validTf = draftTf
+      .filter((q) => q.statement.trim())
+      .map((q) => ({
+        ...q,
+        statement: q.statement.trim(),
+        isTrue: Boolean(q.isTrue),
+        explanation: (q.explanation || '').trim(),
+      }));
+
+    if (validMc.length === 0 && validTf.length === 0) {
+      setEditorError('Vui lòng thêm ít nhất 1 câu trắc nghiệm 4 lựa chọn hoặc 1 câu Đúng/Sai.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const saved = await saveReinforcementExercise({
+        id: editingExercise?.id,
+        subjectId: subject.id,
+        subjectName: subject.name,
+        title: title.trim(),
+        mcQuestions: validMc,
+        tfQuestions: validTf,
+        creationMethod: editingExercise?.creationMethod || editorMode,
+        createdBy: editingExercise?.createdBy || username,
+        createdAt: editingExercise?.createdAt || '',
+      });
+
+      if (onExercisesChange) {
+        onExercisesChange((prev) => {
+          const exists = prev.some((item) => item.id === saved.id);
+          return exists
+            ? prev.map((item) => (item.id === saved.id ? saved : item))
+            : [saved, ...prev];
+        });
+      }
+
+      if (activeExercise?.id === saved.id) {
+        setActiveExercise(saved);
+      }
+      setIsEditorOpen(false);
+    } catch (err) {
+      setEditorError(err.message || 'Không thể lưu bài tập củng cố.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteExercise = async (exercise, e) => {
+    if (e) e.stopPropagation();
+    if (!isAdmin) return;
+    if (!window.confirm(`Xóa bài tập "${exercise.title}"?`)) return;
+    try {
+      await deleteReinforcementExercise(exercise.id);
+      if (onExercisesChange) {
+        onExercisesChange((prev) => prev.filter((item) => item.id !== exercise.id));
+      }
+      if (activeExercise?.id === exercise.id) {
+        setActiveExercise(null);
+      }
+    } catch (err) {
+      alert(err.message || 'Không thể xóa bài tập củng cố.');
+    }
+  };
+
+  const handleOpenExercise = (exercise) => {
+    setActiveExercise(exercise);
+    setMcAnswers({});
+    setTfAnswers({});
+    setIsSubmitted(false);
+  };
+
+  const handleRetry = () => {
+    setMcAnswers({});
+    setTfAnswers({});
+    setIsSubmitted(false);
+  };
+
+  // ============================================================================
+  // CHẾ ĐỘ LÀM BÀI TẬP CỦNG CỐ
+  // ============================================================================
+  if (activeExercise) {
+    const mcList = activeExercise.mcQuestions || [];
+    const tfList = activeExercise.tfQuestions || [];
+    const totalCount = mcList.length + tfList.length;
+
+    let correctCount = 0;
+    if (isSubmitted) {
+      mcList.forEach((q) => {
+        if (mcAnswers[q.id] === q.correctIndex) correctCount += 1;
+      });
+      tfList.forEach((q) => {
+        if (tfAnswers[q.id] === q.isTrue) correctCount += 1;
+      });
+    }
+
+    const answeredCount =
+      mcList.filter((q) => mcAnswers[q.id] !== undefined).length +
+      tfList.filter((q) => tfAnswers[q.id] !== undefined).length;
+    const score10 = totalCount > 0 ? ((correctCount / totalCount) * 10).toFixed(1) : '0.0';
+
+    return (
+      <div className="space-y-5">
+        {/* Thanh đầu trang làm bài */}
+        <div className="p-4 rounded-2xl glass-card border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setActiveExercise(null)}
+              className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Danh sách</span>
+            </button>
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-bold font-display text-white truncate">
+                {activeExercise.title}
+              </h3>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
+                <span>{mcList.length} câu trắc nghiệm</span>
+                <span>•</span>
+                <span>{tfList.length} câu Đúng/Sai</span>
+              </div>
+            </div>
+          </div>
+
+          {isSubmitted ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-xs font-bold">
+                Điểm: {score10}/10 ({correctCount}/{totalCount} đúng)
+              </span>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Làm lại</span>
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs font-semibold text-purple-300 shrink-0">
+              Đã chọn: {answeredCount}/{totalCount} câu
+            </span>
+          )}
+        </div>
+
+        {/* Phần I: Trắc nghiệm 4 lựa chọn */}
+        {mcList.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-purple-300 flex items-center gap-2">
+              <ListChecks className="w-4 h-4" />
+              <span>Phần I. Trắc nghiệm 4 lựa chọn ({mcList.length} câu)</span>
+            </h4>
+
+            <div className="space-y-3">
+              {mcList.map((q, idx) => {
+                const selectedOpt = mcAnswers[q.id];
+                const isCorrect = isSubmitted && selectedOpt === q.correctIndex;
+                return (
+                  <div
+                    key={q.id || idx}
+                    className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                        <span className="text-purple-300 mr-1.5">Câu {idx + 1}:</span>
+                        {q.question}
+                      </p>
+                      {isSubmitted && (
+                        isCorrect ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        )
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(q.options || []).map((opt, optIdx) => {
+                        const isPicked = selectedOpt === optIdx;
+                        const isRightOpt = q.correctIndex === optIdx;
+                        let styleClass =
+                          'bg-white/[0.03] border-white/10 text-slate-300 hover:border-purple-400/40';
+
+                        if (isSubmitted) {
+                          if (isRightOpt) {
+                            styleClass = 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 font-semibold';
+                          } else if (isPicked && !isRightOpt) {
+                            styleClass = 'bg-rose-500/20 border-rose-400/60 text-rose-200';
+                          }
+                        } else if (isPicked) {
+                          styleClass = 'bg-purple-600/25 border-purple-400/70 text-white font-semibold';
+                        }
+
+                        return (
+                          <button
+                            key={optIdx}
+                            type="button"
+                            disabled={isSubmitted}
+                            onClick={() => setMcAnswers((prev) => ({ ...prev, [q.id]: optIdx }))}
+                            className={`p-3 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-start gap-2.5 ${
+                              isSubmitted ? 'cursor-default' : 'cursor-pointer'
+                            } ${styleClass}`}
+                          >
+                            <span className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-[11px] font-bold shrink-0">
+                              {OPTION_LABELS[optIdx]}
+                            </span>
+                            <span className="leading-snug">{opt}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {isSubmitted && q.explanation && (
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300">
+                        <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Phần II: Câu hỏi Đúng / Sai */}
+        {tfList.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
+              <ToggleLeft className="w-4 h-4" />
+              <span>Phần II. Câu hỏi Đúng / Sai ({tfList.length} câu)</span>
+            </h4>
+
+            <div className="space-y-3">
+              {tfList.map((q, idx) => {
+                const selectedVal = tfAnswers[q.id];
+                const isCorrect = isSubmitted && selectedVal === q.isTrue;
+                return (
+                  <div
+                    key={q.id || idx}
+                    className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                        <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
+                        {q.statement}
+                      </p>
+                      {isSubmitted && (
+                        isCorrect ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        )
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      {[
+                        { val: true, label: 'Đúng' },
+                        { val: false, label: 'Sai' },
+                      ].map(({ val, label }) => {
+                        const isPicked = selectedVal === val;
+                        const isRightVal = q.isTrue === val;
+                        let btnClass =
+                          'bg-white/[0.03] border-white/10 text-slate-300 hover:border-cyan-400/40';
+
+                        if (isSubmitted) {
+                          if (isRightVal) {
+                            btnClass = 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 font-bold';
+                          } else if (isPicked && !isRightVal) {
+                            btnClass = 'bg-rose-500/20 border-rose-400/60 text-rose-200';
+                          }
+                        } else if (isPicked) {
+                          btnClass = 'bg-cyan-600/25 border-cyan-400/70 text-white font-bold';
+                        }
+
+                        return (
+                          <button
+                            key={String(val)}
+                            type="button"
+                            disabled={isSubmitted}
+                            onClick={() => setTfAnswers((prev) => ({ ...prev, [q.id]: val }))}
+                            className={`px-5 py-2 rounded-xl border text-xs sm:text-sm transition-all ${
+                              isSubmitted ? 'cursor-default' : 'cursor-pointer'
+                            } ${btnClass}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {isSubmitted && q.explanation && (
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300">
+                        <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Thanh nộp bài */}
+        <div className="flex items-center justify-end gap-2.5 pt-2">
+          {!isSubmitted ? (
+            <button
+              type="button"
+              onClick={() => setIsSubmitted(true)}
+              disabled={answeredCount === 0}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-600/25 disabled:opacity-50 cursor-pointer"
+            >
+              Nộp bài &amp; Xem kết quả
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Làm lại bài tập</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // DANH SÁCH BÀI TẬP CỦNG CỐ + MODAL TẠO / CHỈNH SỬA (ADMIN)
+  // ============================================================================
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="w-4 h-4 text-purple-300" />
+          <h3 className="text-sm font-bold font-display text-white">
+            Danh sách bài tập củng cố ({exercises.length})
+          </h3>
+        </div>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer self-start sm:self-auto"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Tạo Bài Tập Củng Cố</span>
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="py-10 text-center text-xs text-slate-400 space-y-2">
+          <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
+          <p>Đang tải bài tập củng cố...</p>
+        </div>
+      ) : exercises.length === 0 ? (
+        <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
+          Chưa có bài tập củng cố kiến thức nào trong môn {subject?.name}.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {exercises.map((ex) => {
+            const mcCount = ex.mcQuestions?.length || 0;
+            const tfCount = ex.tfQuestions?.length || 0;
+            return (
+              <div
+                key={ex.id}
+                onClick={() => handleOpenExercise(ex)}
+                className="p-4 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="p-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 shrink-0">
+                    <ClipboardCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
+                      {ex.title}
+                    </h4>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
+                      <span>{mcCount} trắc nghiệm</span>
+                      <span>•</span>
+                      <span>{tfCount} đúng/sai</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs font-semibold text-purple-300 mr-1">
+                    Làm bài →
+                  </span>
+                  {isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => openEditModal(ex, e)}
+                        className="p-1.5 rounded-xl glass-button text-purple-300 hover:text-white cursor-pointer"
+                        title="Chỉnh sửa bài tập"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteExercise(ex, e)}
+                        className="p-1.5 rounded-xl glass-button text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                        title="Xóa bài tập"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* MODAL TẠO / CHỈNH SỬA BÀI TẬP CỦNG CỐ (ADMIN) */}
+      {isAdmin && isEditorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/45 dark:bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl bg-white dark:bg-[#111322] border border-slate-200 dark:border-white/20 shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold font-display text-white">
+                  {editingExercise
+                    ? `Chỉnh Sửa Bài Tập • ${editingExercise.title}`
+                    : `Tạo Bài Tập Củng Cố • ${subject?.name}`}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Soạn thủ công hoặc đưa tài liệu bài học để AI tự tạo rồi xem trước và chỉnh sửa trước khi đăng
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSaving && setIsEditorOpen(false)}
+                className="p-2 rounded-xl glass-button text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleSaveExercise} className="flex-1 overflow-y-auto p-6 space-y-5">
+              {editorError && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-semibold">
+                  {editorError}
+                </div>
+              )}
+
+              {/* Tiêu đề bài tập */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Tiêu đề bài tập củng cố *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="VD: Bài tập củng cố Chương 1 - Hàm số lượng giác"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              {/* Chuyển đổi phương pháp: Thủ công | AI */}
+              <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.04] border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditorMode('manual')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    editorMode === 'manual'
+                      ? 'bg-purple-600/35 text-white border border-purple-400/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tạo Thủ Công</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorMode('ai')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    editorMode === 'ai'
+                      ? 'bg-purple-600/35 text-white border border-purple-400/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Đưa Tài Liệu Cho AI Tạo</span>
+                </button>
+              </div>
+
+              {/* Khu vực AI tạo đề từ file / tài liệu */}
+              {editorMode === 'ai' && (
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-purple-500/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Tải file bài học (.pdf, .txt, .doc, .docx) hoặc dán nội dung để AI tạo đề xem trước
+                    </span>
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer shrink-0">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Chọn File Tài Liệu</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.txt,.doc,.docx,.md,.csv,.rtf"
+                        onChange={handleDocumentUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {docFile && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-purple-500/15 border border-purple-400/30 text-xs text-purple-200">
+                      <span className="truncate font-semibold">Đã chọn tệp: {docFile.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDocFile(null)}
+                        className="p-1 rounded-lg hover:bg-purple-500/30 cursor-pointer shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <textarea
+                    rows={4}
+                    value={docText}
+                    onChange={(e) => setDocText(e.target.value)}
+                    placeholder="Dán nội dung lý thuyết bài học hoặc ngân hàng câu hỏi vào đây..."
+                    className="w-full p-3 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                  />
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-end">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Số câu trắc nghiệm
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={aiMcCount}
+                        onChange={(e) => setAiMcCount(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Số câu Đúng/Sai
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={aiTfCount}
+                        onChange={(e) => setAiTfCount(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+                    {!import.meta.env.VITE_GEMINI_API_KEY && (
+                      <div className="col-span-2">
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Gemini API Key (tùy chọn)
+                        </label>
+                        <input
+                          type="password"
+                          value={geminiApiKey}
+                          onChange={(e) => setGeminiApiKey(e.target.value)}
+                          placeholder="Nhập Gemini API Key..."
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleGenerateWithAI}
+                      disabled={isGeneratingAI || (!docText.trim() && !docFile)}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isGeneratingAI ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>AI đang tạo đề...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>AI Tạo Đề Xem Trước</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {editorMode === 'ai' && aiPreviewReady && (
+                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-xs text-emerald-300 font-semibold">
+                  ✓ AI đã tạo xem trước {draftMc.length} câu trắc nghiệm và {draftTf.length} câu Đúng/Sai. Hãy kiểm tra, chỉnh sửa trực tiếp bên dưới trước khi đăng lên hệ thống!
+                </div>
+              )}
+
+              {/* PHẦN I: TRẮC NGHIỆM 4 LỰA CHỌN */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                    <ListChecks className="w-4 h-4" />
+                    <span>Phần I: Trắc nghiệm 4 lựa chọn ({draftMc.length} câu)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDraftMc((prev) => [...prev, EMPTY_MC_QUESTION()])}
+                    className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm câu trắc nghiệm</span>
+                  </button>
+                </div>
+
+                {draftMc.length === 0 ? (
+                  <div className="p-4 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-400">
+                    Chưa có câu trắc nghiệm 4 lựa chọn nào.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {draftMc.map((q, idx) => (
+                      <div
+                        key={q.id || idx}
+                        className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-purple-300">
+                            Câu trắc nghiệm #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setDraftMc((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-rose-400 hover:text-rose-300 p-1 cursor-pointer"
+                            title="Xóa câu này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={q.question}
+                          onChange={(e) =>
+                            setDraftMc((prev) =>
+                              prev.map((item, i) =>
+                                i === idx ? { ...item, question: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="Nhập nội dung câu hỏi trắc nghiệm *"
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                        />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {OPTION_LABELS.map((label, optIdx) => {
+                            const isCorrect = q.correctIndex === optIdx;
+                            return (
+                              <div key={label} className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDraftMc((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx ? { ...item, correctIndex: optIdx } : item
+                                      )
+                                    )
+                                  }
+                                  className={`w-7 h-7 rounded-lg text-xs font-bold shrink-0 border transition-all cursor-pointer ${
+                                    isCorrect
+                                      ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300'
+                                      : 'bg-white/[0.04] border-white/10 text-slate-400 hover:text-white'
+                                  }`}
+                                  title="Chọn làm đáp án đúng"
+                                >
+                                  {label}
+                                </button>
+                                <input
+                                  type="text"
+                                  value={q.options[optIdx] || ''}
+                                  onChange={(e) =>
+                                    setDraftMc((prev) =>
+                                      prev.map((item, i) => {
+                                        if (i !== idx) return item;
+                                        const nextOpts = [...item.options];
+                                        nextOpts[optIdx] = e.target.value;
+                                        return { ...item, options: nextOpts };
+                                      })
+                                    )
+                                  }
+                                  placeholder={`Phương án ${label}${isCorrect ? ' (Đáp án đúng)' : ''}`}
+                                  className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <input
+                          type="text"
+                          value={q.explanation || ''}
+                          onChange={(e) =>
+                            setDraftMc((prev) =>
+                              prev.map((item, i) =>
+                                i === idx ? { ...item, explanation: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="Giải thích đáp án (tùy chọn)"
+                          className="w-full px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* PHẦN II: CÂU HỎI ĐÚNG / SAI */}
+              <div className="space-y-3 pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                    <ToggleLeft className="w-4 h-4" />
+                    <span>Phần II: Câu hỏi Đúng / Sai ({draftTf.length} câu)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDraftTf((prev) => [...prev, EMPTY_TF_QUESTION()])}
+                    className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm câu Đúng/Sai</span>
+                  </button>
+                </div>
+
+                {draftTf.length === 0 ? (
+                  <div className="p-4 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-400">
+                    Chưa có câu hỏi Đúng / Sai nào.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {draftTf.map((q, idx) => (
+                      <div
+                        key={q.id || idx}
+                        className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-cyan-300">
+                            Câu Đúng/Sai #{idx + 1}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDraftTf((prev) =>
+                                  prev.map((item, i) =>
+                                    i === idx ? { ...item, isTrue: true } : item
+                                  )
+                                )
+                              }
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                                q.isTrue
+                                  ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300'
+                                  : 'bg-white/[0.04] border-white/10 text-slate-400'
+                              }`}
+                            >
+                              Đúng
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDraftTf((prev) =>
+                                  prev.map((item, i) =>
+                                    i === idx ? { ...item, isTrue: false } : item
+                                  )
+                                )
+                              }
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                                !q.isTrue
+                                  ? 'bg-rose-500/25 border-rose-400 text-rose-300'
+                                  : 'bg-white/[0.04] border-white/10 text-slate-400'
+                              }`}
+                            >
+                              Sai
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDraftTf((prev) => prev.filter((_, i) => i !== idx))}
+                              className="text-rose-400 hover:text-rose-300 p-1 cursor-pointer"
+                              title="Xóa câu này"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={q.statement}
+                          onChange={(e) =>
+                            setDraftTf((prev) =>
+                              prev.map((item, i) =>
+                                i === idx ? { ...item, statement: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="Nhập phát biểu / câu hỏi Đúng hoặc Sai *"
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400"
+                        />
+
+                        <input
+                          type="text"
+                          value={q.explanation || ''}
+                          onChange={(e) =>
+                            setDraftTf((prev) =>
+                              prev.map((item, i) =>
+                                i === idx ? { ...item, explanation: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="Giải thích đáp án (tùy chọn)"
+                          className="w-full px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setIsEditorOpen(false)}
+                  className="px-4 py-2.5 rounded-xl glass-button text-xs font-semibold text-slate-300 hover:text-white cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{editingExercise ? 'Lưu Cập Nhật' : 'Đăng Bài Tập'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
