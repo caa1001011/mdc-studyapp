@@ -173,83 +173,109 @@ function McQuestionCard({ question, label, selectedIndex, onSelect }) {
   );
 }
 
+const OPTION_LABELS = ['A', 'B', 'C', 'D'];
+
+const formatScoreVi = (val) =>
+  Number(Number(val || 0).toFixed(2))
+    .toString()
+    .replace('.', ',');
+
 /**
- * Hiển thị kết quả 1 câu Đúng/Sai sau khi nộp bài
+ * Hiển thị kết quả 1 câu Đúng/Sai sau khi nộp bài (đồng bộ giao diện bảng như Bài tập củng cố)
  */
 function TrueFalseReviewCard({ question, label, userAnswers = {}, isEnglish = false }) {
   const showLetters = (question.items || []).length > 1;
   const trueLabel = isEnglish ? 'True' : 'Đúng';
   const falseLabel = isEnglish ? 'False' : 'Sai';
   const res = scoreTfQuestion(question, userAnswers);
-  const allCorrect = res.correctItems === res.totalItems && res.totalItems > 0;
 
   return (
-    <div
-      className={`p-5 rounded-2xl glass-card border space-y-3 ${
-        allCorrect ? 'border-emerald-500/35' : 'border-amber-500/35'
-      }`}
-    >
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-xs font-bold text-purple-300">{label}</span>
-        <span
-          className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
-            allCorrect
-              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-              : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-          }`}
-        >
-          Đúng {res.correctItems}/{res.totalItems} ý
+    <div className="p-4 sm:p-5 rounded-2xl glass-card border border-white/10 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs sm:text-sm font-bold text-white leading-relaxed whitespace-pre-line">
+          <span className="text-cyan-300 mr-1.5">{label}:</span>
+          {question.prompt ||
+            (isEnglish
+              ? 'Decide whether the following statements are True or False:'
+              : 'Xét tính đúng/sai của các mệnh đề sau:')}
+        </p>
+        <span className="px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[11px] font-bold shrink-0">
+          +{formatScoreVi(res.earned)}đ ({res.correctItems}/{res.totalItems} ý)
         </span>
       </div>
 
-      {question.prompt && (
-        <p className="text-sm font-semibold text-white whitespace-pre-line">{question.prompt}</p>
-      )}
+      <div className="overflow-x-auto rounded-xl border border-white/10">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-purple-500/10 border-b border-white/10 text-[11px] sm:text-xs font-bold text-purple-300">
+              {showLetters && (
+                <th className="py-2.5 px-3 w-12 text-center border-r border-white/10">Ý</th>
+              )}
+              <th className="py-2.5 px-3 border-r border-white/10">Nội dung khẳng định</th>
+              <th className="py-2.5 px-3 w-20 text-center border-r border-white/10">{trueLabel}</th>
+              <th className="py-2.5 px-3 w-20 text-center">{falseLabel}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10 text-xs sm:text-sm">
+            {(question.items || []).map((item, idx) => {
+              const picked = userAnswers[item.id];
+              const isItemCorrect = picked === item.isTrue;
+              return (
+                <tr
+                  key={item.id || idx}
+                  className={isItemCorrect ? 'bg-emerald-500/[0.06]' : 'bg-rose-500/[0.06]'}
+                >
+                  {showLetters && (
+                    <td className="py-2.5 px-3 text-center font-bold text-white border-r border-white/10 align-middle">
+                      {getItemLetter(idx)})
+                    </td>
+                  )}
+                  <td className="py-2.5 px-3 text-slate-200 border-r border-white/10 align-middle leading-relaxed">
+                    <div className="flex items-start justify-between gap-2">
+                      <span>{item.text}</span>
+                      {isItemCorrect ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      )}
+                    </div>
+                  </td>
+                  {[true, false].map((val) => {
+                    const isPicked = picked === val;
+                    const isRightVal = item.isTrue === val;
+                    let cellBtnClass = 'border-white/15 bg-white/[0.03] text-slate-400';
+                    if (isRightVal) {
+                      cellBtnClass =
+                        'border-emerald-400 bg-emerald-500/25 text-emerald-300 font-bold';
+                    } else if (isPicked && !isRightVal) {
+                      cellBtnClass = 'border-rose-400 bg-rose-500/25 text-rose-300 font-bold';
+                    }
 
-      <div className="space-y-2">
-        {(question.items || []).map((item, idx) => {
-          const chosen = userAnswers[item.id];
-          const isRight = chosen === item.isTrue;
-          return (
-            <div
-              key={item.id}
-              className={`p-3 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
-                isRight
-                  ? 'bg-emerald-500/10 border-emerald-500/30'
-                  : 'bg-rose-500/10 border-rose-500/30'
-              }`}
-            >
-              <div className="text-slate-200 leading-relaxed">
-                {showLetters && (
-                  <strong className="text-purple-300 mr-1.5">{getItemLetter(idx)})</strong>
-                )}
-                <span>{item.text}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 text-[11px]">
-                <span className="text-slate-300">
-                  Đáp án:{' '}
-                  <strong className="text-emerald-400">
-                    {item.isTrue ? trueLabel : falseLabel}
-                  </strong>
-                </span>
-                <span className="text-slate-500">•</span>
-                <span className="text-slate-300">
-                  Bạn chọn:{' '}
-                  <strong className={isRight ? 'text-emerald-400' : 'text-rose-400'}>
-                    {chosen === undefined ? 'Chưa chọn' : chosen ? trueLabel : falseLabel}
-                  </strong>
-                </span>
-              </div>
-            </div>
-          );
-        })}
+                    return (
+                      <td
+                        key={String(val)}
+                        className={`py-2 px-2 text-center align-middle ${
+                          val ? 'border-r border-white/10' : ''
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 mx-auto rounded-lg border flex items-center justify-center text-xs ${cellBtnClass}`}
+                        >
+                          {isPicked || isRightVal ? '✓' : ''}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {question.explanation && (
-        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-slate-300 whitespace-pre-line leading-relaxed">
-          <strong className="text-purple-300">💡 Giải thích:</strong>
-          {'\n'}
-          {question.explanation}
+        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+          <strong className="text-emerald-300">Giải thích:</strong> {question.explanation}
         </div>
       )}
     </div>
@@ -257,52 +283,54 @@ function TrueFalseReviewCard({ question, label, userAnswers = {}, isEnglish = fa
 }
 
 /**
- * Hiển thị kết quả 1 câu Trắc nghiệm 4 lựa chọn sau khi nộp bài
+ * Hiển thị kết quả 1 câu Trắc nghiệm 4 lựa chọn sau khi nộp bài (đồng bộ giao diện lưới 2x2 như Bài tập củng cố)
  */
 function McReviewCard({ question, label, selectedIndex }) {
   const isCorrect = selectedIndex === question.correctIndex;
   return (
-    <div
-      className={`p-5 rounded-2xl glass-card border space-y-2.5 ${
-        isCorrect ? 'border-emerald-500/30' : 'border-rose-500/30'
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-bold text-purple-300">{label}</span>
+    <div className="p-4 sm:p-5 rounded-2xl glass-card border border-white/10 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs sm:text-sm font-bold text-white leading-relaxed whitespace-pre-line">
+          <span className="text-purple-300 mr-1.5">{label}:</span>
+          {question.question}
+        </p>
         {isCorrect ? (
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30">
-            <CheckCircle className="w-3 h-3" /> Đúng
-          </span>
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
         ) : (
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-rose-400 px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30">
-            <XCircle className="w-3 h-3" /> Chưa đúng
-          </span>
+          <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
         )}
       </div>
 
-      <h4 className="text-sm font-bold text-white whitespace-pre-line">{question.question}</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {(question.options || []).map((opt, optIdx) => {
+          const isPicked = selectedIndex === optIdx;
+          const isRightOpt = question.correctIndex === optIdx;
+          const cleanOpt = String(opt || '').replace(/^[A-Da-d]\s*[.):]\s*/, '').trim();
 
-      <div className="text-xs space-y-1 text-slate-300">
-        <div>
-          Đáp án đúng:{' '}
-          <strong className="text-emerald-400">{question.options[question.correctIndex]}</strong>
-        </div>
-        {selectedIndex !== undefined && !isCorrect && (
-          <div>
-            Bạn đã chọn:{' '}
-            <strong className="text-rose-400">{question.options[selectedIndex]}</strong>
-          </div>
-        )}
-        {selectedIndex === undefined && (
-          <div className="text-rose-400 italic">Bạn chưa chọn đáp án</div>
-        )}
+          let styleClass = 'bg-white/[0.03] border-white/10 text-slate-300';
+          if (isRightOpt) {
+            styleClass = 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 font-semibold';
+          } else if (isPicked && !isRightOpt) {
+            styleClass = 'bg-rose-500/20 border-rose-400/60 text-rose-200';
+          }
+
+          return (
+            <div
+              key={optIdx}
+              className={`p-3 rounded-xl border text-left text-xs sm:text-sm flex items-start gap-2.5 ${styleClass}`}
+            >
+              <span className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-[11px] font-bold shrink-0">
+                {OPTION_LABELS[optIdx]}
+              </span>
+              <span className="leading-snug">{cleanOpt}</span>
+            </div>
+          );
+        })}
       </div>
 
       {question.explanation && (
-        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-slate-300 whitespace-pre-line leading-relaxed">
-          <strong className="text-purple-300">💡 Giải thích:</strong>
-          {'\n'}
-          {question.explanation}
+        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+          <strong className="text-emerald-300">Giải thích:</strong> {question.explanation}
         </div>
       )}
     </div>
@@ -1057,15 +1085,15 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
             {/* 1. Review Trắc nghiệm */}
             {normalizedExam.mcQuestions.length > 0 && (
               <div className="space-y-3">
-                <h3 className="text-base font-bold font-display text-white flex items-center gap-2">
-                  <ListChecks className="w-5 h-5 text-purple-400" />
-                  <span>Phần Trắc Nghiệm 4 Lựa Chọn</span>
+                <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-purple-300 flex items-center gap-2">
+                  <ListChecks className="w-4 h-4" />
+                  <span>Phần I. Trắc nghiệm 4 lựa chọn ({normalizedExam.mcQuestions.length} câu)</span>
                 </h3>
                 {normalizedExam.mcQuestions.map((q, idx) => (
                   <McReviewCard
                     key={q.id}
                     question={q}
-                    label={`Trắc nghiệm • Câu ${idx + 1}`}
+                    label={`Câu ${idx + 1}`}
                     selectedIndex={mcAnswers[q.id]}
                   />
                 ))}
@@ -1075,15 +1103,19 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
             {/* 2. Review Đúng/Sai */}
             {normalizedExam.tfQuestions.length > 0 && (
               <div className="space-y-3">
-                <h3 className="text-base font-bold font-display text-white flex items-center gap-2">
-                  <ToggleLeft className="w-5 h-5 text-indigo-400" />
-                  <span>{isEnglish ? 'Phần True / False' : 'Phần Đúng / Sai'}</span>
+                <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
+                  <ToggleLeft className="w-4 h-4" />
+                  <span>
+                    {isEnglish
+                      ? `Phần II. True / False (${normalizedExam.tfQuestions.length} câu)`
+                      : `Phần II. Câu hỏi Đúng / Sai (${normalizedExam.tfQuestions.length} câu)`}
+                  </span>
                 </h3>
                 {normalizedExam.tfQuestions.map((q, idx) => (
                   <TrueFalseReviewCard
                     key={q.id}
                     question={q}
-                    label={`${isEnglish ? 'True / False' : 'Đúng / Sai'} • Câu ${idx + 1}`}
+                    label={`Câu ${idx + 1}`}
                     userAnswers={tfAnswers[q.id] || {}}
                     isEnglish={isEnglish}
                   />
