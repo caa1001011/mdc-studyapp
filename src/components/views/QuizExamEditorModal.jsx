@@ -640,7 +640,6 @@ export default function QuizExamEditorModal({
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {subject?.name} • {category?.name}
-                {isEnglish && ' • Chế độ Tiếng Anh (có Reading, không có Trả lời ngắn)'}
               </p>
             </div>
           </div>
@@ -883,33 +882,24 @@ export default function QuizExamEditorModal({
             {/* TAB 2: ĐÚNG / SAI */}
             {activeTab === 'tf' && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                    Phần Câu Hỏi Đúng / Sai ({tfQuestions.length} câu)
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
+                    <ToggleLeft className="w-4 h-4" />
+                    <span>Phần Câu Hỏi Đúng / Sai ({tfQuestions.length} câu)</span>
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTfQuestions((prev) => [...prev, EMPTY_TF(1)])}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1 cursor-pointer hover:bg-slate-200/70 dark:hover:bg-white/10"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Thêm câu Đ/S (1 ý)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTfQuestions((prev) => [...prev, EMPTY_TF(4)])}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-purple-500/20 border border-indigo-200 dark:border-purple-400/30 text-xs font-semibold text-indigo-700 dark:text-purple-200 inline-flex items-center gap-1 cursor-pointer hover:bg-indigo-100 dark:hover:bg-purple-500/30"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Thêm câu Đ/S (4 ý a-d)</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTfQuestions((prev) => [...prev, EMPTY_TF(4)])}
+                    className="px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-cyan-700 dark:text-cyan-300 hover:text-indigo-700 dark:hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm câu Đúng/Sai</span>
+                  </button>
                 </div>
 
                 {tfQuestions.length === 0 ? (
-                  <div className="p-6 rounded-2xl border border-dashed border-slate-300 dark:border-white/15 text-center text-xs text-slate-500 dark:text-slate-400">
-                    Chưa có câu hỏi Đúng/Sai nào. Bạn có thể tạo câu 1 ý (không đánh chữ cái) hoặc nhiều ý a, b, c, d...
+                  <div className="p-4 rounded-2xl border border-dashed border-slate-300 dark:border-white/10 text-center text-xs text-slate-500 dark:text-slate-400">
+                    Chưa có câu hỏi Đúng / Sai nào.
                   </div>
                 ) : (
                   tfQuestions.map((q, idx) => (
@@ -1270,7 +1260,7 @@ export default function QuizExamEditorModal({
               ) : (
                 <Save className="w-3.5 h-3.5" />
               )}
-              <span>{editingExam ? 'Cập Nhật Đề Thi' : 'Lưu & Đăng Đề Thi'}</span>
+              <span>{editingExam ? 'Cập Nhật Đề Thi' : 'Lưu & Tạo Đề Thi'}</span>
             </button>
           </div>
         </form>
