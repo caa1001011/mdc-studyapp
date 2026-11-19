@@ -398,24 +398,35 @@ export default function FlashcardView({ currentUser: propsUser }) {
           return next;
         });
 
-        // Nếu đổi tên sách, cập nhật lại bookName cho các bộ thẻ thuộc sách đó
+        // Nếu đổi tên sách, chỉ cập nhật bookName cho các bộ thẻ thuộc đúng thư mục sách này
         const oldName = (editingBook.name || '').trim().toLowerCase();
+        const oldGrade = (editingBook.grade || '').trim().toLowerCase();
         const newNameClean = newBookName.trim();
         if (oldName && oldName !== newNameClean.toLowerCase()) {
-          const affectedDecks = textbookDecks.filter(
-            (d) =>
+          const affectedDecks = textbookDecks.filter((d) => {
+            if (d.bookId) return d.bookId === saved.id || d.bookId === editingBook.id;
+            return (
               (d.category || 'global_success') === addingBookCategory &&
-              (d.bookName || '').trim().toLowerCase() === oldName
-          );
+              (d.bookName || '').trim().toLowerCase() === oldName &&
+              (d.grade || '').trim().toLowerCase() === oldGrade
+            );
+          });
           if (affectedDecks.length > 0) {
             await Promise.all(
               affectedDecks.map((d) =>
-                saveTextbookDeck({ ...d, bookName: newNameClean, category: addingBookCategory })
+                saveTextbookDeck({
+                  ...d,
+                  bookId: saved.id,
+                  bookName: newNameClean,
+                  category: addingBookCategory,
+                })
               )
             );
             setTextbookDecks((prev) =>
               prev.map((d) =>
-                affectedDecks.some((a) => a.id === d.id) ? { ...d, bookName: newNameClean } : d
+                affectedDecks.some((a) => a.id === d.id)
+                  ? { ...d, bookId: saved.id, bookName: newNameClean }
+                  : d
               )
             );
           }
@@ -634,9 +645,11 @@ export default function FlashcardView({ currentUser: propsUser }) {
     const autoBooks = new Map();
 
     categoryDecks.forEach((deck) => {
-      let targetBook = deck.bookId ? bookById.get(deck.bookId) : null;
+      let targetBook = null;
 
-      if (!targetBook) {
+      if (deck.bookId) {
+        targetBook = bookById.get(deck.bookId) || null;
+      } else {
         const deckNameKey = (deck.bookName || '').trim().toLowerCase();
         const deckGradeKey = (deck.grade || '').trim().toLowerCase();
         targetBook =
@@ -650,6 +663,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
       }
 
       if (!targetBook) {
+        if (deck.bookId) return; // Bộ thẻ thuộc thư mục đã xóa thì không gộp sang thư mục khác
         const name = (
           deck.bookName || (category === 'global_success' ? 'Global Success' : 'Tài liệu mở rộng')
         ).trim();
@@ -675,13 +689,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const globalSuccessBooks = getCategoryBooks('global_success');
   const extendedBooks = getCategoryBooks('extended');
 
+  // Khớp đúng duy nhất theo id thư mục để các thư mục hoàn toàn độc lập với nhau
   const activeBookFolder = selectedBookFolder
-    ? [...globalSuccessBooks, ...extendedBooks].find(
-        (b) =>
-          b.id === selectedBookFolder.id ||
-          (b.category === selectedBookFolder.category &&
-            b.name.toLowerCase() === selectedBookFolder.name.toLowerCase())
-      ) || selectedBookFolder
+    ? [...globalSuccessBooks, ...extendedBooks].find((b) => b.id === selectedBookFolder.id) ||
+      selectedBookFolder
     : null;
 
   const renderLibrarySection = ({
