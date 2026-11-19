@@ -110,6 +110,60 @@ function doPost(e) {
       return jsonResponse({ ok: true });
     }
 
+    if (action === 'gemini') {
+      var geminiApiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+      if (!geminiApiKey || !String(geminiApiKey).trim()) {
+        return jsonResponse({
+          ok: false,
+          error: 'Chưa cấu hình GEMINI_API_KEY trong Apps Script (Cài đặt dự án -> Thuộc tính tập lệnh).'
+        });
+      }
+
+      var model = String(body.model || 'gemini-2.5-flash').trim();
+      var geminiUrl =
+        'https://generativelanguage.googleapis.com/v1beta/models/' +
+        encodeURIComponent(model) +
+        ':generateContent?key=' +
+        encodeURIComponent(String(geminiApiKey).trim());
+
+      var geminiPayload = {
+        contents: body.contents || [{ parts: [{ text: String(body.prompt || '') }] }],
+        generationConfig: body.generationConfig || { temperature: 0.3 }
+      };
+
+      var aiRes = UrlFetchApp.fetch(geminiUrl, {
+        method: 'post',
+        contentType: 'application/json; charset=UTF-8',
+        payload: JSON.stringify(geminiPayload),
+        muteHttpExceptions: true
+      });
+
+      var aiStatus = aiRes.getResponseCode();
+      var aiText = aiRes.getContentText();
+      if (aiStatus < 200 || aiStatus >= 300) {
+        return jsonResponse({
+          ok: false,
+          error: 'Gemini API lỗi HTTP ' + aiStatus + ': ' + aiText.slice(0, 300)
+        });
+      }
+
+      var aiData = JSON.parse(aiText);
+      var candidateText =
+        (aiData &&
+          aiData.candidates &&
+          aiData.candidates[0] &&
+          aiData.candidates[0].content &&
+          aiData.candidates[0].content.parts &&
+          aiData.candidates[0].content.parts[0] &&
+          aiData.candidates[0].content.parts[0].text) ||
+        '';
+
+      return jsonResponse({
+        ok: true,
+        text: candidateText
+      });
+    }
+
     return jsonResponse({ ok: false, error: 'Hành động không hợp lệ: ' + action });
   } catch (err) {
     return jsonResponse({

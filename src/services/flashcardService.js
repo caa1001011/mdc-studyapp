@@ -8,6 +8,7 @@ import {
   where
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { generateGeminiText } from './geminiService';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -394,7 +395,7 @@ function parseVocabularyFromText(rawText) {
 /**
  * Gọi AI (Gemini API nếu có VITE_GEMINI_API_KEY, hoặc bộ phân tích thông minh) để tạo flashcard từ tài liệu (văn bản hoặc file PDF/DOC/DOCX/TXT...)
  */
-export async function generateFlashcardsFromDocument(documentInput, customApiKey = '') {
+export async function generateFlashcardsFromDocument(documentInput) {
   const isObj = typeof documentInput === 'object' && documentInput !== null;
   const text = (isObj ? documentInput.text : documentInput || '').trim();
   const fileData = isObj ? documentInput.fileData : null;
@@ -403,9 +404,7 @@ export async function generateFlashcardsFromDocument(documentInput, customApiKey
     throw new Error('Vui lòng nhập nội dung tài liệu hoặc chọn tệp tài liệu.');
   }
 
-  const apiKey = (customApiKey || import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-
-  if (apiKey) {
+  try {
     const promptText = `Bạn là trợ lý học từ vựng Tiếng Anh THPT. Hãy trích xuất các từ vựng Tiếng Anh quan trọng từ tài liệu sau và trả về DUY NHẤT một mảng JSON hợp lệ (không markdown, không giải thích thêm).
 Mỗi phần tử trong mảng có cấu trúc:
 {
@@ -426,26 +425,7 @@ Mỗi phần tử trong mảng có cấu trúc:
       });
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { temperature: 0.3 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('Lỗi Gemini API:', errBody);
-      throw new Error('Không thể gọi AI Gemini. Vui lòng kiểm tra lại API Key hoặc định dạng tệp.');
-    }
-
-    const data = await response.json();
-    const rawOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const rawOutput = await generateGeminiText({ parts, temperature: 0.3 });
     const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       throw new Error('AI không trả về đúng định dạng danh sách từ vựng. Vui lòng thử lại.');
@@ -462,20 +442,13 @@ Mỗi phần tử trong mảng có cấu trúc:
         hint: String(item.hint || '').trim(),
         example: String(item.example || '').trim(),
       }));
+  } catch (aiErr) {
+    if (text && !fileData) {
+      const parsedCards = parseVocabularyFromText(text);
+      if (parsedCards.length > 0) {
+        return parsedCards;
+      }
+    }
+    throw aiErr;
   }
-
-  if (fileData && !text) {
-    throw new Error(
-      'Để AI đọc trực tiếp tệp PDF/DOC/DOCX, vui lòng nhập Gemini API Key (hoặc dán nội dung văn bản dạng "Từ vựng - Nghĩa").'
-    );
-  }
-
-  // Fallback phân tích trực tiếp tài liệu dạng danh sách từ vựng
-  const parsedCards = parseVocabularyFromText(text);
-  if (parsedCards.length === 0) {
-    throw new Error(
-      'Chưa cấu hình Gemini API Key nên hệ thống chỉ trích xuất được danh sách dạng "Từ vựng - Nghĩa" hoặc "Từ vựng : Nghĩa" trên từng dòng. Hãy nhập Gemini API Key hoặc định dạng tài liệu theo từng dòng.'
-    );
-  }
-  return parsedCards;
 }

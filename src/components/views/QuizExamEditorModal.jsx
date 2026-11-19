@@ -358,7 +358,6 @@ export default function QuizExamEditorModal({
   // AI states
   const [docText, setDocText] = useState('');
   const [docFile, setDocFile] = useState(null);
-  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiGeneratedNotice, setAiGeneratedNotice] = useState('');
 
@@ -431,15 +430,12 @@ export default function QuizExamEditorModal({
     setAiGeneratedNotice('');
     setIsGeneratingAI(true);
     try {
-      const result = await generateExamFromDocument(
-        {
-          text: docText,
-          fileData: docFile,
-          subjectName: subject?.name || '',
-          isEnglish,
-        },
-        geminiApiKey
-      );
+      const result = await generateExamFromDocument({
+        text: docText,
+        fileData: docFile,
+        subjectName: subject?.name || '',
+        isEnglish,
+      });
 
       setMcQuestions(result.mcQuestions || []);
       setTfQuestions(result.tfQuestions || []);
@@ -764,16 +760,6 @@ export default function QuizExamEditorModal({
                 }
                 className="w-full p-3 rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
               />
-
-              {!import.meta.env.VITE_GEMINI_API_KEY && (
-                <input
-                  type="password"
-                  value={geminiApiKey}
-                  onChange={(e) => setGeminiApiKey(e.target.value)}
-                  placeholder="Gemini API Key (tùy chọn — dùng để AI phân tích PDF/DOC/DOCX hoặc văn bản tự do)"
-                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                />
-              )}
 
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">

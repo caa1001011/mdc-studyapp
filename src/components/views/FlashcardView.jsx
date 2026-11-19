@@ -109,7 +109,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
   // AI Document import state
   const [docText, setDocText] = useState('');
   const [docFile, setDocFile] = useState(null);
-  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreviewReady, setAiPreviewReady] = useState(false);
   const [modalError, setModalError] = useState('');
@@ -542,10 +541,10 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setModalError('');
     setIsGeneratingAI(true);
     try {
-      const generated = await generateFlashcardsFromDocument(
-        { text: docText, fileData: docFile },
-        geminiApiKey
-      );
+      const generated = await generateFlashcardsFromDocument({
+        text: docText,
+        fileData: docFile,
+      });
       setDraftCards(generated);
       setAiPreviewReady(true);
     } catch (err) {
@@ -1704,16 +1703,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     placeholder="Dán đoạn văn Tiếng Anh hoặc danh sách từ vựng từ tài liệu của bạn vào đây..."
                     className="w-full p-3 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
                   />
-
-                  {!import.meta.env.VITE_GEMINI_API_KEY && (
-                    <input
-                      type="password"
-                      value={geminiApiKey}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
-                      placeholder="Gemini API Key (tùy chọn - để AI tự trích xuất từ đoạn văn bất kỳ)"
-                      className="w-full px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                    />
-                  )}
 
                   <div className="flex justify-end">
                     <button

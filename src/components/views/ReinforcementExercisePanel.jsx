@@ -125,7 +125,6 @@ export default function ReinforcementExercisePanel({
   const [quickAiLesson, setQuickAiLesson] = useState(() => initialAiLesson || '');
   const [quickAiCustomTopic, setQuickAiCustomTopic] = useState('');
   const [quickAiExtraText, setQuickAiExtraText] = useState('');
-  const [quickAiApiKey, setQuickAiApiKey] = useState('');
   const [isQuickGenerating, setIsQuickGenerating] = useState(false);
   const [quickAiError, setQuickAiError] = useState('');
 
@@ -142,7 +141,6 @@ export default function ReinforcementExercisePanel({
   const [docFile, setDocFile] = useState(null);
   const [aiMcCount, setAiMcCount] = useState(defaultAiMc);
   const [aiTfCount, setAiTfCount] = useState(defaultAiTf);
-  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreviewReady, setAiPreviewReady] = useState(false);
 
@@ -176,17 +174,14 @@ export default function ReinforcementExercisePanel({
 
     setIsQuickGenerating(true);
     try {
-      const result = await generateReinforcementExerciseFromDocument(
-        {
-          text: quickAiExtraText,
-          lessonTitle: chosenLesson,
-          mcCount: defaultAiMc,
-          tfCount: defaultAiTf,
-          subjectName: subject?.name || '',
-          isEnglish,
-        },
-        quickAiApiKey
-      );
+      const result = await generateReinforcementExerciseFromDocument({
+        text: quickAiExtraText,
+        lessonTitle: chosenLesson,
+        mcCount: defaultAiMc,
+        tfCount: defaultAiTf,
+        subjectName: subject?.name || '',
+        isEnglish,
+      });
 
       if (isAdmin) {
         // Quản trị viên: mở giao diện xem trước & chỉnh sửa rồi đăng áp dụng cho toàn hệ thống
@@ -314,18 +309,15 @@ export default function ReinforcementExercisePanel({
     setEditorError('');
     setIsGeneratingAI(true);
     try {
-      const result = await generateReinforcementExerciseFromDocument(
-        {
-          text: docText,
-          fileData: docFile,
-          lessonTitle: title,
-          mcCount: aiMcCount,
-          tfCount: isEnglish ? 0 : aiTfCount,
-          subjectName: subject?.name || '',
-          isEnglish,
-        },
-        geminiApiKey
-      );
+      const result = await generateReinforcementExerciseFromDocument({
+        text: docText,
+        fileData: docFile,
+        lessonTitle: title,
+        mcCount: aiMcCount,
+        tfCount: isEnglish ? 0 : aiTfCount,
+        subjectName: subject?.name || '',
+        isEnglish,
+      });
       setDraftMc(result.mcQuestions || []);
       setDraftTf(result.tfQuestions || []);
       setAiPreviewReady(true);
@@ -1067,20 +1059,6 @@ export default function ReinforcementExercisePanel({
                         />
                       </div>
                     )}
-                    {!import.meta.env.VITE_GEMINI_API_KEY && (
-                      <div className="col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Gemini API Key (tùy chọn)
-                        </label>
-                        <input
-                          type="password"
-                          value={geminiApiKey}
-                          onChange={(e) => setGeminiApiKey(e.target.value)}
-                          placeholder="Nhập Gemini API Key..."
-                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                        />
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex justify-end">
@@ -1592,21 +1570,6 @@ export default function ReinforcementExercisePanel({
                   className="w-full p-3 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:border-purple-400"
                 />
               </div>
-
-              {!import.meta.env.VITE_GEMINI_API_KEY && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Gemini API Key
-                  </label>
-                  <input
-                    type="password"
-                    value={quickAiApiKey}
-                    onChange={(e) => setQuickAiApiKey(e.target.value)}
-                    placeholder="Nhập Gemini API Key để AI tạo câu hỏi..."
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:border-purple-400"
-                  />
-                </div>
-              )}
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-white/10">
                 <button

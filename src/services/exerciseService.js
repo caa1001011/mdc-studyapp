@@ -6,6 +6,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { generateGeminiText } from './geminiService';
 
 const EXERCISES_COLLECTION = 'reinforcement_exercises';
 const LOCAL_STORAGE_KEY = 'lumina_reinforcement_exercises';
@@ -280,18 +281,15 @@ function parseExerciseFromText(rawText) {
  * - Các môn khác: mặc định 8 câu Trắc nghiệm 1 lựa chọn + 2 câu Đúng/Sai (4 ý a,b,c,d)
  * Hỗ trợ tạo trực tiếp từ tên bài học (lessonTitle) và/hoặc tài liệu/file đính kèm
  */
-export async function generateReinforcementExerciseFromDocument(
-  {
-    text = '',
-    fileData = null,
-    lessonTitle = '',
-    mcCount,
-    tfCount,
-    subjectName = '',
-    isEnglish,
-  },
-  customApiKey = ''
-) {
+export async function generateReinforcementExerciseFromDocument({
+  text = '',
+  fileData = null,
+  lessonTitle = '',
+  mcCount,
+  tfCount,
+  subjectName = '',
+  isEnglish,
+}) {
   const cleanText = String(text || '').trim();
   const cleanLesson = String(lessonTitle || '').trim();
   if (!cleanText && !fileData && !cleanLesson) {
@@ -320,9 +318,7 @@ export async function generateReinforcementExerciseFromDocument(
     throw new Error('Vui lòng chọn ít nhất 1 câu trắc nghiệm hoặc 1 câu Đúng/Sai để AI tạo.');
   }
 
-  const apiKey = (customApiKey || import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-
-  if (apiKey) {
+  try {
     const lessonContextLine = cleanLesson
       ? `\nChủ đề / Bài học trọng tâm: "${cleanLesson}" (môn ${subjectName || 'THPT'}).`
       : '';
@@ -385,26 +381,7 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
       });
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { temperature: 0.35 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('Lỗi Gemini API khi tạo bài tập củng cố:', errBody);
-      throw new Error('Không thể gọi AI Gemini. Vui lòng kiểm tra lại API Key hoặc định dạng tệp.');
-    }
-
-    const data = await response.json();
-    const rawOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const rawOutput = await generateGeminiText({ parts, temperature: 0.35 });
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('AI không trả về đúng định dạng JSON đề bài tập. Vui lòng thử lại.');
@@ -456,23 +433,14 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
     }
 
     return { mcQuestions, tfQuestions };
+  } catch (aiErr) {
+    if (cleanText && !fileData) {
+      const parsed = parseExerciseFromText(cleanText);
+      if (englishMode) parsed.tfQuestions = [];
+      if (parsed.mcQuestions.length > 0 || parsed.tfQuestions.length > 0) {
+        return parsed;
+      }
+    }
+    throw aiErr;
   }
-
-  if (!cleanText) {
-    throw new Error(
-      'Để AI tự động tạo câu hỏi theo bài học hoặc đọc file PDF/DOC/DOCX, vui lòng cấu hình hoặc nhập Gemini API Key.'
-    );
-  }
-
-  const parsed = parseExerciseFromText(cleanText);
-  if (englishMode) {
-    parsed.tfQuestions = [];
-  }
-  if (parsed.mcQuestions.length === 0 && parsed.tfQuestions.length === 0) {
-    throw new Error(
-      'Chưa cấu hình Gemini API Key nên hệ thống chỉ tách được câu hỏi theo mẫu "Câu 1: ... A. ... B. ... C. ... D. ... Đáp án: A". Hãy nhập Gemini API Key để AI tự tạo câu hỏi cho bài học này.'
-    );
-  }
-
-  return parsed;
 }

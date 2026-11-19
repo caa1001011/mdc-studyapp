@@ -6,6 +6,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { generateGeminiText } from './geminiService';
 
 const EXAMS_COLLECTION = 'exam_quizzes';
 
@@ -542,7 +543,7 @@ function parseExamFromTextLocal(rawText, isEnglish = false) {
 /**
  * Tạo đề thi đầy đủ các phần từ tài liệu/file bằng AI (Gemini 2.5 Flash) để Admin xem trước & chỉnh sửa
  */
-export async function generateExamFromDocument(documentInput, customApiKey = '') {
+export async function generateExamFromDocument(documentInput) {
   const isObj = typeof documentInput === 'object' && documentInput !== null;
   const text = (isObj ? documentInput.text : documentInput || '').trim();
   const fileData = isObj ? documentInput.fileData : null;
@@ -555,9 +556,7 @@ export async function generateExamFromDocument(documentInput, customApiKey = '')
     throw new Error('Vui lòng nhập nội dung tài liệu hoặc chọn tệp đề thi.');
   }
 
-  const apiKey = (customApiKey || import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-
-  if (apiKey) {
+  try {
     const promptText = isEnglish
       ? `Bạn là giáo viên Tiếng Anh THPT. Hãy trích xuất hoặc biên soạn bộ đề thi môn Tiếng Anh từ tài liệu sau và trả về DUY NHẤT một object JSON hợp lệ (không markdown, không giải thích thêm).
 Cấu trúc JSON bắt buộc:
@@ -663,25 +662,7 @@ Lưu ý: correctAnswer trong shortQuestions phải là một số thực (VD: "1
       parts.push({ text: `Nội dung tài liệu:\n${text.slice(0, 18000)}` });
     }
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { temperature: 0.2 },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Lỗi Gemini API (${res.status}): ${errBody.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const rawOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const rawOutput = await generateGeminiText({ parts, temperature: 0.2 });
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('AI không trả về đúng định dạng đề thi JSON.');
@@ -732,28 +713,21 @@ Lưu ý: correctAnswer trong shortQuestions phải là một số thực (VD: "1
       readingPassages,
       essayQuestions,
     };
+  } catch (aiErr) {
+    if (text && !fileData) {
+      const localResult = parseExamFromTextLocal(text, isEnglish);
+      const localTotal =
+        localResult.mcQuestions.length +
+        localResult.tfQuestions.length +
+        localResult.shortQuestions.length +
+        localResult.essayQuestions.length;
+
+      if (localTotal > 0) {
+        return localResult;
+      }
+    }
+    throw aiErr;
   }
-
-  if (fileData && !text) {
-    throw new Error(
-      'Để AI đọc tệp PDF/DOC/DOCX, vui lòng nhập Gemini API Key hoặc dán nội dung văn bản trực tiếp vào khung bên dưới.'
-    );
-  }
-
-  const localResult = parseExamFromTextLocal(text, isEnglish);
-  const localTotal =
-    localResult.mcQuestions.length +
-    localResult.tfQuestions.length +
-    localResult.shortQuestions.length +
-    localResult.essayQuestions.length;
-
-  if (localTotal > 0) {
-    return localResult;
-  }
-
-  throw new Error(
-    'Không nhận diện được cấu trúc câu hỏi. Hãy nhập đúng định dạng (VD: "Câu 1: ... A. ... B. ... C. ... D. ...") hoặc nhập Gemini API Key để AI tự động trích xuất đầy đủ các phần.'
-  );
 }
 
 // Giữ export cũ để đảm bảo tương thích
