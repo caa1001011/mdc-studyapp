@@ -57,6 +57,7 @@ import {
 } from '../../services/googleDriveService';
 import { fetchReinforcementExercises } from '../../services/exerciseService';
 import ReinforcementExercisePanel from './ReinforcementExercisePanel';
+import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
 const ICONS_MAP = {
   Calculator: Calculator,
@@ -133,6 +134,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   const currentUser = propsUser || sessionUser;
   const username = currentUser?.username || 'admin';
   const isAdmin = currentUser?.role === 'admin';
+  const { requestDelete } = useConfirmDelete();
 
   // Quick Notes state (lưu riêng theo từng thư mục bài học trong Video bài giảng)
   const [notesContent, setNotesContent] = useState('');
@@ -433,26 +435,37 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     }
   };
 
-  // Admin: Xóa thư mục bài học
-  const handleDeleteFolder = async (folder, e) => {
+  // Admin: Xóa thư mục bài học (có hộp thoại xác nhận + hoàn tác 3 giây)
+  const handleDeleteFolder = (folder, e) => {
     e.stopPropagation();
     if (!isAdmin) return;
     const folderVideos = allLessons.filter((l) => l.folderId === folder.id);
     if (folderVideos.length > 0) {
-      alert('Vui lòng xóa các video bên trong thư mục trước khi xóa thư mục này.');
+      alert('Vui lòng xóa các tài liệu bên trong thư mục trước khi xóa thư mục này.');
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa thư mục "${folder.name}"?`)) return;
 
-    try {
-      await deleteLessonFolder(folder.id);
-      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
-      if (selectedFolder?.id === folder.id) {
-        setSelectedFolder(null);
-      }
-    } catch (err) {
-      alert(err.message || 'Không thể xóa thư mục.');
-    }
+    const prevFolders = folders;
+    const prevSelectedFolder = selectedFolder;
+
+    requestDelete({
+      title: 'Xác nhận xóa thư mục',
+      message: `Bạn có chắc chắn muốn xóa thư mục "${folder.name}"?`,
+      itemLabel: `Đã xóa thư mục "${folder.name}"`,
+      onOptimisticDelete: () => {
+        setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+        if (selectedFolder?.id === folder.id) {
+          setSelectedFolder(null);
+        }
+      },
+      onUndo: () => {
+        setFolders(prevFolders);
+        setSelectedFolder(prevSelectedFolder);
+      },
+      onCommitDelete: async () => {
+        await deleteLessonFolder(folder.id);
+      },
+    });
   };
 
   // Ghi nhận bài học người dùng vừa truy cập (chỉ lưu bài học, không lưu thư mục, tối đa 5 bài gần nhất)
@@ -600,20 +613,30 @@ export default function StudySpaceView({ currentUser: propsUser }) {
     }
   };
 
-  // Admin: Xóa bài học
-  const handleDeleteLesson = async (lesson) => {
+  // Admin: Xóa bài học (có hộp thoại xác nhận + hoàn tác 3 giây)
+  const handleDeleteLesson = (lesson) => {
     if (!isAdmin) return;
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa "${lesson.title}"?`)) return;
+    const prevLessons = allLessons;
+    const prevActiveLesson = activeLesson;
 
-    try {
-      await deleteSubjectLesson(lesson);
-      setAllLessons((prev) => prev.filter((item) => item.id !== lesson.id));
-      if (activeLesson?.id === lesson.id) {
-        setActiveLesson(null);
-      }
-    } catch (err) {
-      alert(err.message || 'Không thể xóa bài học.');
-    }
+    requestDelete({
+      title: 'Xác nhận xóa bài học',
+      message: `Bạn có chắc chắn muốn xóa "${lesson.title}"?`,
+      itemLabel: `Đã xóa "${lesson.title}"`,
+      onOptimisticDelete: () => {
+        setAllLessons((prev) => prev.filter((item) => item.id !== lesson.id));
+        if (activeLesson?.id === lesson.id) {
+          setActiveLesson(null);
+        }
+      },
+      onUndo: () => {
+        setAllLessons(prevLessons);
+        setActiveLesson(prevActiveLesson);
+      },
+      onCommitDelete: async () => {
+        await deleteSubjectLesson(lesson);
+      },
+    });
   };
 
   // Lưu tiến độ xem video

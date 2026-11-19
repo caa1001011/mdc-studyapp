@@ -43,6 +43,7 @@ import {
   renderPdfCoverToDataUrl,
   generateFlashcardsFromDocument
 } from '../../services/flashcardService';
+import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
 const EMPTY_CARD = () => ({
   id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -59,6 +60,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const currentUser = propsUser || sessionUser;
   const username = currentUser?.username || 'student';
   const isAdmin = currentUser?.role === 'admin';
+  const { requestDelete } = useConfirmDelete();
 
   // Danh sách bộ thẻ & đầu sách: Global Success, Mở rộng, và Bộ thẻ cá nhân
   const [textbookDecks, setTextbookDecks] = useState([]);
@@ -447,41 +449,56 @@ export default function FlashcardView({ currentUser: propsUser }) {
     }
   };
 
-  const handleDeleteBook = async (book, e) => {
+  const handleDeleteBook = (book, e) => {
     if (e) e.stopPropagation();
     if (!isAdmin || !book) return;
     const decksInBook = Array.isArray(book.decks) ? book.decks : [];
     const confirmMsg =
       decksInBook.length > 0
-        ? `Xóa thư mục sách "${book.name}" và toàn bộ ${decksInBook.length} bộ thẻ bên trong?`
-        : `Xóa thư mục sách "${book.name}"?`;
-    if (!window.confirm(confirmMsg)) return;
+        ? `Bạn có chắc chắn muốn xóa thư mục sách "${book.name}" và toàn bộ ${decksInBook.length} bộ thẻ bên trong?`
+        : `Bạn có chắc chắn muốn xóa thư mục sách "${book.name}"?`;
 
-    try {
-      if (decksInBook.length > 0) {
-        await Promise.all(decksInBook.map((d) => deleteTextbookDeck(d.id)));
-        const deletedIds = new Set(decksInBook.map((d) => d.id));
-        setTextbookDecks((prev) => prev.filter((d) => !deletedIds.has(d.id)));
-        if (deletedIds.has(selectedDeckId)) {
-          setSelectedDeckId(null);
-          handleRestart();
+    const prevBooks = flashcardBooks;
+    const prevDecks = textbookDecks;
+    const prevSelectedFolder = selectedBookFolder;
+    const prevSelectedDeckId = selectedDeckId;
+    const deletedIds = new Set(decksInBook.map((d) => d.id));
+
+    requestDelete({
+      title: 'Xác nhận xóa thư mục sách',
+      message: confirmMsg,
+      itemLabel: `Đã xóa thư mục "${book.name}"`,
+      onOptimisticDelete: () => {
+        if (deletedIds.size > 0) {
+          setTextbookDecks((prev) => prev.filter((d) => !deletedIds.has(d.id)));
+          if (deletedIds.has(selectedDeckId)) {
+            setSelectedDeckId(null);
+            handleRestart();
+          }
         }
-      }
-
-      if (!String(book.id).startsWith('auto-')) {
-        await deleteFlashcardBook(book.id);
-      }
-      if (book.coverDriveFileId) {
-        deleteFileFromGoogleDrive(book.coverDriveFileId);
-      }
-
-      setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
-      if (selectedBookFolder?.id === book.id) {
-        setSelectedBookFolder(null);
-      }
-    } catch (err) {
-      alert(err.message || 'Không thể xóa thư mục sách.');
-    }
+        setFlashcardBooks((prev) => prev.filter((b) => b.id !== book.id));
+        if (selectedBookFolder?.id === book.id) {
+          setSelectedBookFolder(null);
+        }
+      },
+      onUndo: () => {
+        setFlashcardBooks(prevBooks);
+        setTextbookDecks(prevDecks);
+        setSelectedBookFolder(prevSelectedFolder);
+        setSelectedDeckId(prevSelectedDeckId);
+      },
+      onCommitDelete: async () => {
+        if (decksInBook.length > 0) {
+          await Promise.all(decksInBook.map((d) => deleteTextbookDeck(d.id)));
+        }
+        if (!String(book.id).startsWith('auto-')) {
+          await deleteFlashcardBook(book.id);
+        }
+        if (book.coverDriveFileId) {
+          deleteFileFromGoogleDrive(book.coverDriveFileId);
+        }
+      },
+    });
   };
 
   // Đọc file tài liệu (.pdf, .doc, .docx, .txt, .md, .csv, .rtf)
@@ -606,31 +623,44 @@ export default function FlashcardView({ currentUser: propsUser }) {
     }
   };
 
-  const handleDeleteDeck = async (deck, e) => {
+  const handleDeleteDeck = (deck, e) => {
     e.stopPropagation();
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa bộ thẻ "${deck.title}"?`)) return;
+    const isTextbook = deck.sourceType === 'textbook' && isAdmin;
+    const isPersonal = deck.sourceType === 'personal';
+    if (!isTextbook && !isPersonal) return;
 
-    try {
-      if (deck.sourceType === 'textbook' && isAdmin) {
-        await deleteTextbookDeck(deck.id);
-        const nextList = textbookDecks.filter((d) => d.id !== deck.id);
-        setTextbookDecks(nextList);
+    const prevTextbook = textbookDecks;
+    const prevPersonal = personalDecks;
+    const prevSelectedDeckId = selectedDeckId;
+
+    requestDelete({
+      title: 'Xác nhận xóa bộ thẻ',
+      message: `Bạn có chắc chắn muốn xóa bộ thẻ "${deck.title}"?`,
+      itemLabel: `Đã xóa bộ thẻ "${deck.title}"`,
+      onOptimisticDelete: () => {
+        if (isTextbook) {
+          setTextbookDecks((prev) => prev.filter((d) => d.id !== deck.id));
+        } else {
+          setPersonalDecks((prev) => prev.filter((d) => d.id !== deck.id));
+        }
         if (selectedDeckId === deck.id) {
-          setSelectedDeckId(nextList[0]?.id || personalDecks[0]?.id || null);
+          setSelectedDeckId(null);
           handleRestart();
         }
-      } else if (deck.sourceType === 'personal') {
-        await deleteUserFlashcardDeck(username, deck.id);
-        const nextList = personalDecks.filter((d) => d.id !== deck.id);
-        setPersonalDecks(nextList);
-        if (selectedDeckId === deck.id) {
-          setSelectedDeckId(textbookDecks[0]?.id || nextList[0]?.id || null);
-          handleRestart();
+      },
+      onUndo: () => {
+        setTextbookDecks(prevTextbook);
+        setPersonalDecks(prevPersonal);
+        setSelectedDeckId(prevSelectedDeckId);
+      },
+      onCommitDelete: async () => {
+        if (isTextbook) {
+          await deleteTextbookDeck(deck.id);
+        } else {
+          await deleteUserFlashcardDeck(username, deck.id);
         }
-      }
-    } catch (err) {
-      alert(err.message || 'Không thể xóa bộ thẻ.');
-    }
+      },
+    });
   };
 
   const getCategoryBooks = (category) => {

@@ -23,6 +23,7 @@ import {
   generateReinforcementExerciseFromDocument,
   normalizeTfQuestion
 } from '../../services/exerciseService';
+import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
 const EMPTY_MC_QUESTION = () => ({
   id: `mc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -78,6 +79,8 @@ export default function ReinforcementExercisePanel({
   username = 'student',
   onExercisesChange,
 }) {
+  const { requestDelete } = useConfirmDelete();
+
   // Chế độ làm bài (người học & admin đều có thể mở làm thử)
   const [activeExercise, setActiveExercise] = useState(null);
   const [mcAnswers, setMcAnswers] = useState({});
@@ -278,21 +281,39 @@ export default function ReinforcementExercisePanel({
     }
   };
 
-  const handleDeleteExercise = async (exercise, e) => {
+  const handleDeleteExercise = (exercise, e) => {
     if (e) e.stopPropagation();
     if (!isAdmin) return;
-    if (!window.confirm(`Xóa bài tập "${exercise.title}"?`)) return;
-    try {
-      await deleteReinforcementExercise(exercise.id);
-      if (onExercisesChange) {
-        onExercisesChange((prev) => prev.filter((item) => item.id !== exercise.id));
-      }
-      if (activeExercise?.id === exercise.id) {
-        setActiveExercise(null);
-      }
-    } catch (err) {
-      alert(err.message || 'Không thể xóa bài tập củng cố.');
-    }
+    const prevActive = activeExercise;
+    let backupList = null;
+
+    requestDelete({
+      title: 'Xác nhận xóa bài tập',
+      message: `Bạn có chắc chắn muốn xóa bài tập "${exercise.title}"?`,
+      itemLabel: `Đã xóa "${exercise.title}"`,
+      onOptimisticDelete: () => {
+        if (onExercisesChange) {
+          onExercisesChange((prev) => {
+            backupList = prev;
+            return prev.filter((item) => item.id !== exercise.id);
+          });
+        }
+        if (activeExercise?.id === exercise.id) {
+          setActiveExercise(null);
+        }
+      },
+      onUndo: () => {
+        if (onExercisesChange && backupList) {
+          onExercisesChange(backupList);
+        }
+        if (prevActive?.id === exercise.id) {
+          setActiveExercise(prevActive);
+        }
+      },
+      onCommitDelete: async () => {
+        await deleteReinforcementExercise(exercise.id);
+      },
+    });
   };
 
   const handleOpenExercise = (exercise) => {

@@ -36,6 +36,7 @@ import {
   deleteExam,
   generateQuestionsFromDocument
 } from '../../services/quizService';
+import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
 const ICONS_MAP = {
   Calculator,
@@ -57,6 +58,7 @@ export default function QuizReviewView({ currentUser: propsUser }) {
   const currentUser = propsUser || sessionUser;
   const username = currentUser?.username || 'student';
   const isAdmin = currentUser?.role === 'admin';
+  const { requestDelete } = useConfirmDelete();
 
   // Navigation state: Subjects -> 4 Exam Categories -> Exam List -> Active Exam
   const [selectedSubject, setSelectedSubject] = useState(null);
@@ -312,15 +314,27 @@ export default function QuizReviewView({ currentUser: propsUser }) {
     }
   };
 
-  const handleDeleteExam = async (examId, e) => {
+  const handleDeleteExam = (examId, e) => {
     e.stopPropagation();
     if (!isAdmin) return;
-    try {
-      await deleteExam(examId);
-      setAllExams((prev) => prev.filter((ex) => ex.id !== examId));
-    } catch (err) {
-      console.error('Lỗi xóa đề thi:', err);
-    }
+    const targetExam = allExams.find((ex) => ex.id === examId);
+    const examTitle = targetExam?.title || 'đề thi này';
+    const prevExams = allExams;
+
+    requestDelete({
+      title: 'Xác nhận xóa đề thi',
+      message: `Bạn có chắc chắn muốn xóa đề "${examTitle}"?`,
+      itemLabel: `Đã xóa đề "${examTitle}"`,
+      onOptimisticDelete: () => {
+        setAllExams((prev) => prev.filter((ex) => ex.id !== examId));
+      },
+      onUndo: () => {
+        setAllExams(prevExams);
+      },
+      onCommitDelete: async () => {
+        await deleteExam(examId);
+      },
+    });
   };
 
   // Filtered exams for current subject & category

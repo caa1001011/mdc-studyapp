@@ -3,6 +3,7 @@ import AuroraBackground from './components/AuroraBackground';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import PageLoading from './components/PageLoading';
+import { ConfirmDeleteProvider } from './components/ConfirmDeleteProvider';
 import LoginView from './components/views/LoginView';
 import { getSessionUser, saveSessionUser, clearSessionUser, ensureAdminAccount } from './services/authService';
 
@@ -103,6 +104,7 @@ export default function App() {
   };
 
   return (
+    <ConfirmDeleteProvider>
     <div className={`min-h-screen relative transition-colors duration-500 selection:bg-purple-500/30 selection:text-purple-200 ${
       theme === 'dark' ? 'text-slate-100' : 'text-slate-800'
     }`}>
@@ -136,5 +138,6 @@ export default function App() {
         </main>
       </div>
     </div>
+    </ConfirmDeleteProvider>
   );
 }

@@ -24,6 +24,7 @@ import {
   loadLocalPersonalNotes,
   saveUserPersonalNotes
 } from '../../services/personalNoteService';
+import { useConfirmDelete } from '../ConfirmDeleteProvider';
 import {
   fetchUserDailyGoals,
   loadLocalDailyGoals,
@@ -67,6 +68,7 @@ const parseDateKey = (key) => {
 
 export default function DashboardView({ currentUser }) {
   const username = currentUser?.username || '';
+  const { requestDelete } = useConfirmDelete();
 
   // Đồng bộ thời gian thực (cập nhật mỗi giây)
   const [now, setNow] = useState(() => new Date());
@@ -366,10 +368,26 @@ export default function DashboardView({ currentUser }) {
     await saveUserPersonalNotes(username, nextNotes);
   };
 
-  const handleDeleteNote = async (id) => {
+  const handleDeleteNote = (id) => {
+    const targetNote = notes.find((n) => n.id === id);
+    const noteTitle = targetNote?.title || 'ghi chú này';
+    const prevNotes = notes;
     const nextNotes = notes.filter((n) => n.id !== id);
-    setNotes(nextNotes);
-    await saveUserPersonalNotes(username, nextNotes);
+
+    requestDelete({
+      title: 'Xác nhận xóa ghi chú',
+      message: `Bạn có chắc chắn muốn xóa ghi chú "${noteTitle}"?`,
+      itemLabel: `Đã xóa ghi chú "${noteTitle}"`,
+      onOptimisticDelete: () => {
+        setNotes(nextNotes);
+      },
+      onUndo: () => {
+        setNotes(prevNotes);
+      },
+      onCommitDelete: async () => {
+        await saveUserPersonalNotes(username, nextNotes);
+      },
+    });
   };
 
   const formatNoteDate = (isoString) => {
