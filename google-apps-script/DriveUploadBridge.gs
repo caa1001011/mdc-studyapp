@@ -119,7 +119,7 @@ function doPost(e) {
         });
       }
 
-      var model = String(body.model || 'gemini-2.5-flash').trim();
+      var model = String(body.model || 'gemini-3.5-flash-lite').trim();
       var geminiUrl =
         'https://generativelanguage.googleapis.com/v1beta/models/' +
         encodeURIComponent(model) +
@@ -166,9 +166,11 @@ function doPost(e) {
 
     return jsonResponse({ ok: false, error: 'Hành động không hợp lệ: ' + action });
   } catch (err) {
+    var rawMsg = err && err.message ? err.message : String(err);
+    var safeMsg = String(rawMsg).replace(/([?&]key=)[^&\s]+/gi, '$1***');
     return jsonResponse({
       ok: false,
-      error: err && err.message ? err.message : String(err)
+      error: safeMsg
     });
   }
 }

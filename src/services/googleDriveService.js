@@ -2,7 +2,10 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 const DRIVE_ROOT_FOLDER_NAME = 'BeaconLearn';
-const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbysTls_-ixkdEhQl-g2lJe0uYORqDURQ2G862ujPPu3e-KcLCo6B86Z4UjcZoGb58xy/exec';
+const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2uahZAet5L9WrOHV05pmr_eeecXJoXRKJFM1YniccPe_7t_TGVOogEPDiMu3_lWm7/exec';
+const DEPRECATED_APPS_SCRIPT_URLS = new Set([
+  'https://script.google.com/macros/s/AKfycbysTls_-ixkdEhQl-g2lJe0uYORqDURQ2G862ujPPu3e-KcLCo6B86Z4UjcZoGb58xy/exec',
+]);
 const APPS_SCRIPT_URL_STORAGE_KEY = 'lumina_gdrive_apps_script_url';
 const SETTINGS_COLLECTION = 'app_settings';
 const DRIVE_SETTINGS_DOC = 'google_drive';
@@ -20,24 +23,32 @@ export function getDriveSubjectFolderName(subject) {
   return (subject.name || 'Chung').replace(/\s+Học$/i, '').trim();
 }
 
+function resolveActiveAppsScriptUrl(candidate) {
+  const clean = String(candidate || '').trim();
+  if (!clean || DEPRECATED_APPS_SCRIPT_URLS.has(clean)) {
+    return DEFAULT_APPS_SCRIPT_URL;
+  }
+  return clean;
+}
+
 export function getSavedAppsScriptUrl() {
-  return (
+  return resolveActiveAppsScriptUrl(
     import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
-    localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) ||
-    DEFAULT_APPS_SCRIPT_URL
-  ).trim();
+      localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) ||
+      DEFAULT_APPS_SCRIPT_URL
+  );
 }
 
 export async function fetchAppsScriptUrl() {
   const envUrl = (import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL || '').trim();
-  if (envUrl) return envUrl;
+  if (envUrl && !DEPRECATED_APPS_SCRIPT_URLS.has(envUrl)) return envUrl;
 
   if (db) {
     try {
       const snap = await getDoc(doc(db, SETTINGS_COLLECTION, DRIVE_SETTINGS_DOC));
       if (snap.exists() && snap.data()?.appsScriptUrl) {
         const url = String(snap.data().appsScriptUrl).trim();
-        if (url) {
+        if (url && !DEPRECATED_APPS_SCRIPT_URLS.has(url)) {
           localStorage.setItem(APPS_SCRIPT_URL_STORAGE_KEY, url);
           return url;
         }
@@ -47,7 +58,13 @@ export async function fetchAppsScriptUrl() {
     }
   }
 
-  return (localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) || DEFAULT_APPS_SCRIPT_URL).trim();
+  const active = resolveActiveAppsScriptUrl(localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY));
+  try {
+    localStorage.setItem(APPS_SCRIPT_URL_STORAGE_KEY, active);
+  } catch {
+    // ignore
+  }
+  return active;
 }
 
 export async function saveAppsScriptUrl(url) {

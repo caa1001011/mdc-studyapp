@@ -9,7 +9,7 @@ import { fetchAppsScriptUrl } from './googleDriveService';
 export async function generateGeminiText({
   parts,
   temperature = 0.3,
-  model = 'gemini-2.5-flash',
+  model = 'gemini-3.5-flash-lite',
 }) {
   const endpoint = await fetchAppsScriptUrl();
   const contents = [{ parts }];
