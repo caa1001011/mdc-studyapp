@@ -117,7 +117,39 @@ export async function deleteReinforcementExercise(exerciseId) {
 }
 
 /**
- * Bộ phân tích câu hỏi Trắc nghiệm 4 lựa chọn & Đúng/Sai từ văn bản thô (fallback khi chưa có API Key)
+ * Chuẩn hóa câu hỏi Đúng/Sai sang định dạng mới (1 đề bài + nhiều ý a, b, c, d...)
+ */
+export function normalizeTfQuestion(q, fallbackIdx = 0) {
+  if (!q) return null;
+  if (Array.isArray(q.items)) {
+    return {
+      id: q.id || `tf-${Date.now()}-${fallbackIdx}`,
+      prompt: String(q.prompt || '').trim(),
+      items: q.items.map((item, idx) => ({
+        id: item.id || `${q.id || `tf-${fallbackIdx}`}-item-${idx}`,
+        text: String(item.text || '').trim(),
+        isTrue: Boolean(item.isTrue),
+      })),
+      explanation: String(q.explanation || '').trim(),
+    };
+  }
+  // Tương thích dữ liệu cũ (1 phát biểu đơn lẻ)
+  return {
+    id: q.id || `tf-${Date.now()}-${fallbackIdx}`,
+    prompt: '',
+    items: [
+      {
+        id: `${q.id || `tf-${fallbackIdx}`}-item-0`,
+        text: String(q.statement || '').trim(),
+        isTrue: Boolean(q.isTrue),
+      },
+    ],
+    explanation: String(q.explanation || '').trim(),
+  };
+}
+
+/**
+ * Bộ phân tích câu hỏi Trắc nghiệm 4 lựa chọn & Đúng/Sai (nhiều ý a, b, c, d...) từ văn bản thô
  */
 function parseExerciseFromText(rawText) {
   const blocks = rawText
@@ -133,61 +165,65 @@ function parseExerciseFromText(rawText) {
     if (lines.length === 0) continue;
 
     const firstLine = lines[0].replace(/^(Câu\s*\d+\s*[:.]|\d+\.)\s*/i, '').trim();
-    const options = [];
+    const mcOptions = [];
+    const tfSubItems = [];
     let correctIndex = 0;
     let explanation = '';
-    let tfAnswer = null;
 
     for (let j = 1; j < lines.length; j++) {
       const line = lines[j];
-      const optMatch = line.match(/^([A-Da-d])\s*[.):]\s*(.+)$/);
-      if (optMatch && options.length < 4) {
-        let optText = optMatch[2].trim();
+      const lowerSubMatch = line.match(/^([a-z])\)\s*(.+)$/);
+      const upperOptMatch = line.match(/^([A-D])\s*[.):]\s*(.+)$/);
+
+      if (lowerSubMatch) {
+        let text = lowerSubMatch[2].trim();
+        let isTrue = true;
+        if (/\(sai\)|\[sai\]|[-–:]\s*sai$/i.test(text)) {
+          isTrue = false;
+          text = text.replace(/\s*(\(sai\)|\[sai\]|[-–:]\s*sai)$/i, '').trim();
+        } else if (/\(đúng\)|\[đúng\]|[-–:]\s*đúng$/i.test(text)) {
+          isTrue = true;
+          text = text.replace(/\s*(\(đúng\)|\[đúng\]|[-–:]\s*đúng)$/i, '').trim();
+        }
+        tfSubItems.push({
+          id: `tf-${Date.now()}-${i}-${tfSubItems.length}`,
+          text,
+          isTrue,
+        });
+      } else if (upperOptMatch && mcOptions.length < 4) {
+        let optText = upperOptMatch[2].trim();
         if (optText.startsWith('*') || /\(đúng\)|\[đúng\]/i.test(optText)) {
-          correctIndex = options.length;
+          correctIndex = mcOptions.length;
           optText = optText.replace(/^\*|\(đúng\)|\[đúng\]/gi, '').trim();
         }
-        options.push(optText);
+        mcOptions.push(optText);
       } else if (/^Đáp án\s*[:.]/i.test(line)) {
         const afterColon = line.replace(/^Đáp án\s*[:.]\s*/i, '').trim();
-        if (/^(đúng|true|đ)$/i.test(afterColon)) {
-          tfAnswer = true;
-        } else if (/^(sai|false|s)$/i.test(afterColon)) {
-          tfAnswer = false;
-        } else {
-          const ansMatch = afterColon.match(/^([A-Da-d])/);
-          if (ansMatch) {
-            correctIndex = 'ABCD'.indexOf(ansMatch[1].toUpperCase());
-          }
+        const ansMatch = afterColon.match(/^([A-Da-d])/);
+        if (ansMatch && mcOptions.length >= 2) {
+          correctIndex = 'ABCD'.indexOf(ansMatch[1].toUpperCase());
         }
       } else if (/^Giải thích\s*[:.]/i.test(line)) {
         explanation = line.replace(/^Giải thích\s*[:.]\s*/i, '').trim();
       }
     }
 
-    if (options.length >= 2) {
-      while (options.length < 4) options.push('');
+    if (tfSubItems.length > 0) {
+      tfQuestions.push({
+        id: `tf-${Date.now()}-${i}`,
+        prompt: firstLine,
+        items: tfSubItems,
+        explanation,
+      });
+    } else if (mcOptions.length >= 2) {
+      while (mcOptions.length < 4) mcOptions.push('');
       mcQuestions.push({
         id: `mc-${Date.now()}-${i}`,
         question: firstLine,
-        options: options.slice(0, 4),
+        options: mcOptions.slice(0, 4),
         correctIndex: Math.min(3, Math.max(0, correctIndex)),
         explanation,
       });
-    } else if (tfAnswer !== null || /\((đúng|sai)\)|\[(đúng|sai)\]/i.test(firstLine)) {
-      let cleanStatement = firstLine;
-      if (tfAnswer === null) {
-        tfAnswer = /\(đúng\)|\[đúng\]/i.test(firstLine);
-        cleanStatement = firstLine.replace(/\((đúng|sai)\)|\[(đúng|sai)\]/gi, '').trim();
-      }
-      if (cleanStatement) {
-        tfQuestions.push({
-          id: `tf-${Date.now()}-${i}`,
-          statement: cleanStatement,
-          isTrue: Boolean(tfAnswer),
-          explanation,
-        });
-      }
     }
   }
 
@@ -216,9 +252,9 @@ export async function generateReinforcementExerciseFromDocument(
   const apiKey = (customApiKey || import.meta.env.VITE_GEMINI_API_KEY || '').trim();
 
   if (apiKey) {
-    const promptText = `Bạn là giáo viên THPT bộ môn ${subjectName || 'tổng hợp'}. Hãy đọc kỹ tài liệu bài học được cung cấp và tạo bài tập củng cố kiến thức gồm:
+    const promptText = `Bạn là giáo viên THPT bộ môn ${subjectName || 'tổng hợp'}. Hãy đọc kỹ tài liệu bài học được cung cấp và tạo bài tập củng cố kiến thức theo cấu trúc đề thi THPT mới nhất gồm:
 - Đúng ${targetMc} câu hỏi trắc nghiệm 4 lựa chọn (mcQuestions)
-- Đúng ${targetTf} câu hỏi Đúng/Sai (tfQuestions)
+- Đúng ${targetTf} câu hỏi Đúng/Sai dạng chùm (tfQuestions): MỖI câu gồm 1 đề bài/câu dẫn chung ("prompt") và 4 ý khẳng định nhỏ a, b, c, d ("items") để học sinh xét Đúng hoặc Sai cho từng ý.
 
 Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdown, không giải thích ngoài JSON) theo cấu trúc sau:
 {
@@ -232,9 +268,14 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
   ],
   "tfQuestions": [
     {
-      "statement": "Nội dung phát biểu Đúng/Sai",
-      "isTrue": true,
-      "explanation": "Giải thích ngắn gọn vì sao Đúng hoặc Sai"
+      "prompt": "Đề bài chung / giả thiết của câu Đúng/Sai. Xét tính đúng/sai của các mệnh đề sau:",
+      "items": [
+        { "text": "Nội dung khẳng định ý a", "isTrue": true },
+        { "text": "Nội dung khẳng định ý b", "isTrue": false },
+        { "text": "Nội dung khẳng định ý c", "isTrue": true },
+        { "text": "Nội dung khẳng định ý d", "isTrue": false }
+      ],
+      "explanation": "Giải thích ngắn gọn cho các ý"
     }
   ]
 }${cleanText ? `\n\nNội dung tài liệu bài học:\n${cleanText.slice(0, 15000)}` : ''}`;
@@ -293,13 +334,24 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
 
     const tfQuestions = Array.isArray(parsed.tfQuestions)
       ? parsed.tfQuestions
-          .filter((q) => q?.statement)
-          .map((q, idx) => ({
-            id: `tf-ai-${Date.now()}-${idx}`,
-            statement: String(q.statement).trim(),
-            isTrue: Boolean(q.isTrue),
-            explanation: String(q.explanation || '').trim(),
-          }))
+          .filter((q) => q && (Array.isArray(q.items) ? q.items.length > 0 : q.statement))
+          .map((q, idx) => {
+            if (Array.isArray(q.items)) {
+              return {
+                id: `tf-ai-${Date.now()}-${idx}`,
+                prompt: String(q.prompt || '').trim(),
+                items: q.items
+                  .filter((it) => it?.text)
+                  .map((it, subIdx) => ({
+                    id: `tf-ai-${Date.now()}-${idx}-${subIdx}`,
+                    text: String(it.text).replace(/^[a-z]\)\s*/i, '').trim(),
+                    isTrue: Boolean(it.isTrue),
+                  })),
+                explanation: String(q.explanation || '').trim(),
+              };
+            }
+            return normalizeTfQuestion(q, idx);
+          })
       : [];
 
     if (mcQuestions.length === 0 && tfQuestions.length === 0) {

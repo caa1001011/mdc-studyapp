@@ -20,7 +20,8 @@ import {
 import {
   saveReinforcementExercise,
   deleteReinforcementExercise,
-  generateReinforcementExerciseFromDocument
+  generateReinforcementExerciseFromDocument,
+  normalizeTfQuestion
 } from '../../services/exerciseService';
 
 const EMPTY_MC_QUESTION = () => ({
@@ -31,12 +32,20 @@ const EMPTY_MC_QUESTION = () => ({
   explanation: '',
 });
 
+const EMPTY_TF_ITEM = () => ({
+  id: `tfi-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  text: '',
+  isTrue: true,
+});
+
 const EMPTY_TF_QUESTION = () => ({
   id: `tf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-  statement: '',
-  isTrue: true,
+  prompt: '',
+  items: [EMPTY_TF_ITEM(), EMPTY_TF_ITEM(), EMPTY_TF_ITEM(), EMPTY_TF_ITEM()],
   explanation: '',
 });
+
+const getSubItemLabel = (index) => `${String.fromCharCode(97 + (index % 26))})`;
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
@@ -107,7 +116,7 @@ export default function ReinforcementExercisePanel({
     );
     setDraftTf(
       Array.isArray(exercise.tfQuestions)
-        ? exercise.tfQuestions.map((q) => ({ ...EMPTY_TF_QUESTION(), ...q }))
+        ? exercise.tfQuestions.map((q, idx) => normalizeTfQuestion(q, idx))
         : []
     );
     setDocText('');
@@ -195,13 +204,19 @@ export default function ReinforcementExercisePanel({
       }));
 
     const validTf = draftTf
-      .filter((q) => q.statement.trim())
       .map((q) => ({
         ...q,
-        statement: q.statement.trim(),
-        isTrue: Boolean(q.isTrue),
+        prompt: (q.prompt || '').trim(),
+        items: (q.items || [])
+          .filter((it) => (it.text || '').trim())
+          .map((it) => ({
+            ...it,
+            text: it.text.trim(),
+            isTrue: Boolean(it.isTrue),
+          })),
         explanation: (q.explanation || '').trim(),
-      }));
+      }))
+      .filter((q) => q.items.length > 0);
 
     if (validMc.length === 0 && validTf.length === 0) {
       setEditorError('Vui lòng thêm ít nhất 1 câu trắc nghiệm 4 lựa chọn hoặc 1 câu Đúng/Sai.');
@@ -277,22 +292,25 @@ export default function ReinforcementExercisePanel({
   // ============================================================================
   if (activeExercise) {
     const mcList = activeExercise.mcQuestions || [];
-    const tfList = activeExercise.tfQuestions || [];
-    const totalCount = mcList.length + tfList.length;
+    const tfList = (activeExercise.tfQuestions || [])
+      .map((q, idx) => normalizeTfQuestion(q, idx))
+      .filter(Boolean);
+    const allTfItems = tfList.flatMap((q) => q.items || []);
+    const totalCount = mcList.length + allTfItems.length;
 
     let correctCount = 0;
     if (isSubmitted) {
       mcList.forEach((q) => {
         if (mcAnswers[q.id] === q.correctIndex) correctCount += 1;
       });
-      tfList.forEach((q) => {
-        if (tfAnswers[q.id] === q.isTrue) correctCount += 1;
+      allTfItems.forEach((item) => {
+        if (tfAnswers[item.id] === item.isTrue) correctCount += 1;
       });
     }
 
     const answeredCount =
       mcList.filter((q) => mcAnswers[q.id] !== undefined).length +
-      tfList.filter((q) => tfAnswers[q.id] !== undefined).length;
+      allTfItems.filter((item) => tfAnswers[item.id] !== undefined).length;
     const score10 = totalCount > 0 ? ((correctCount / totalCount) * 10).toFixed(1) : '0.0';
 
     return (
@@ -420,7 +438,7 @@ export default function ReinforcementExercisePanel({
           </div>
         )}
 
-        {/* Phần II: Câu hỏi Đúng / Sai */}
+        {/* Phần II: Câu hỏi Đúng / Sai (dạng bảng mệnh đề a, b, c, d...) */}
         {tfList.length > 0 && (
           <div className="space-y-3">
             <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
@@ -428,73 +446,111 @@ export default function ReinforcementExercisePanel({
               <span>Phần II. Câu hỏi Đúng / Sai ({tfList.length} câu)</span>
             </h4>
 
-            <div className="space-y-3">
-              {tfList.map((q, idx) => {
-                const selectedVal = tfAnswers[q.id];
-                const isCorrect = isSubmitted && selectedVal === q.isTrue;
-                return (
-                  <div
-                    key={q.id || idx}
-                    className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
-                        <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
-                        {q.statement}
-                      </p>
-                      {isSubmitted && (
-                        isCorrect ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                        )
-                      )}
-                    </div>
+            <div className="space-y-4">
+              {tfList.map((q, idx) => (
+                <div
+                  key={q.id || idx}
+                  className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
+                >
+                  <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                    <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
+                    {q.prompt || 'Xét tính đúng/sai của các mệnh đề sau:'}
+                  </p>
 
-                    <div className="flex items-center gap-2.5">
-                      {[
-                        { val: true, label: 'Đúng' },
-                        { val: false, label: 'Sai' },
-                      ].map(({ val, label }) => {
-                        const isPicked = selectedVal === val;
-                        const isRightVal = q.isTrue === val;
-                        let btnClass =
-                          'bg-white/[0.03] border-white/10 text-slate-300 hover:border-cyan-400/40';
+                  <div className="overflow-x-auto rounded-xl border border-white/10">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-purple-500/10 border-b border-white/10 text-[11px] sm:text-xs font-bold text-purple-300">
+                          <th className="py-2.5 px-3 w-12 text-center border-r border-white/10">Ý</th>
+                          <th className="py-2.5 px-3 border-r border-white/10">Nội dung khẳng định</th>
+                          <th className="py-2.5 px-3 w-20 text-center border-r border-white/10">Đúng</th>
+                          <th className="py-2.5 px-3 w-20 text-center">Sai</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-xs sm:text-sm">
+                        {(q.items || []).map((item, subIdx) => {
+                          const picked = tfAnswers[item.id];
+                          const isItemCorrect = isSubmitted && picked === item.isTrue;
+                          return (
+                            <tr
+                              key={item.id || subIdx}
+                              className={
+                                isSubmitted
+                                  ? isItemCorrect
+                                    ? 'bg-emerald-500/[0.06]'
+                                    : 'bg-rose-500/[0.06]'
+                                  : 'hover:bg-white/[0.02]'
+                              }
+                            >
+                              <td className="py-2.5 px-3 text-center font-bold text-white border-r border-white/10 align-middle">
+                                {getSubItemLabel(subIdx)}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-200 border-r border-white/10 align-middle leading-relaxed">
+                                <div className="flex items-start justify-between gap-2">
+                                  <span>{item.text}</span>
+                                  {isSubmitted &&
+                                    (isItemCorrect ? (
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                                    ) : (
+                                      <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                                    ))}
+                                </div>
+                              </td>
+                              {[true, false].map((val) => {
+                                const isPicked = picked === val;
+                                const isRightVal = item.isTrue === val;
+                                let cellBtnClass =
+                                  'border-white/20 bg-white/[0.04] text-slate-400 hover:border-cyan-400/60';
+                                if (isSubmitted) {
+                                  if (isRightVal) {
+                                    cellBtnClass =
+                                      'border-emerald-400 bg-emerald-500/25 text-emerald-300 font-bold';
+                                  } else if (isPicked && !isRightVal) {
+                                    cellBtnClass =
+                                      'border-rose-400 bg-rose-500/25 text-rose-300 font-bold';
+                                  }
+                                } else if (isPicked) {
+                                  cellBtnClass =
+                                    'border-cyan-400 bg-cyan-500/25 text-cyan-200 font-bold';
+                                }
 
-                        if (isSubmitted) {
-                          if (isRightVal) {
-                            btnClass = 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 font-bold';
-                          } else if (isPicked && !isRightVal) {
-                            btnClass = 'bg-rose-500/20 border-rose-400/60 text-rose-200';
-                          }
-                        } else if (isPicked) {
-                          btnClass = 'bg-cyan-600/25 border-cyan-400/70 text-white font-bold';
-                        }
-
-                        return (
-                          <button
-                            key={String(val)}
-                            type="button"
-                            disabled={isSubmitted}
-                            onClick={() => setTfAnswers((prev) => ({ ...prev, [q.id]: val }))}
-                            className={`px-5 py-2 rounded-xl border text-xs sm:text-sm transition-all ${
-                              isSubmitted ? 'cursor-default' : 'cursor-pointer'
-                            } ${btnClass}`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {isSubmitted && q.explanation && (
-                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300">
-                        <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
-                      </div>
-                    )}
+                                return (
+                                  <td
+                                    key={String(val)}
+                                    className={`py-2 px-2 text-center align-middle ${
+                                      val ? 'border-r border-white/10' : ''
+                                    }`}
+                                  >
+                                    <button
+                                      type="button"
+                                      disabled={isSubmitted}
+                                      onClick={() =>
+                                        setTfAnswers((prev) => ({ ...prev, [item.id]: val }))
+                                      }
+                                      className={`w-7 h-7 mx-auto rounded-lg border flex items-center justify-center text-xs transition-all ${
+                                        isSubmitted ? 'cursor-default' : 'cursor-pointer'
+                                      } ${cellBtnClass}`}
+                                      aria-label={val ? 'Đúng' : 'Sai'}
+                                    >
+                                      {isPicked || (isSubmitted && isRightVal) ? '✓' : ''}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                );
-              })}
+
+                  {isSubmitted && q.explanation && (
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300">
+                      <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -925,7 +981,7 @@ export default function ReinforcementExercisePanel({
                 )}
               </div>
 
-              {/* PHẦN II: CÂU HỎI ĐÚNG / SAI */}
+              {/* PHẦN II: CÂU HỎI ĐÚNG / SAI (1 ĐỀ BÀI + NHIỀU Ý a, b, c, d, e...) */}
               <div className="space-y-3 pt-2 border-t border-white/10">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
@@ -947,75 +1003,174 @@ export default function ReinforcementExercisePanel({
                     Chưa có câu hỏi Đúng / Sai nào.
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {draftTf.map((q, idx) => (
                       <div
                         key={q.id || idx}
-                        className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5"
+                        className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-cyan-300">
+                          <span className="text-xs font-bold text-cyan-300">
                             Câu Đúng/Sai #{idx + 1}
                           </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDraftTf((prev) =>
-                                  prev.map((item, i) =>
-                                    i === idx ? { ...item, isTrue: true } : item
-                                  )
-                                )
-                              }
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                                q.isTrue
-                                  ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300'
-                                  : 'bg-white/[0.04] border-white/10 text-slate-400'
-                              }`}
-                            >
-                              Đúng
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDraftTf((prev) =>
-                                  prev.map((item, i) =>
-                                    i === idx ? { ...item, isTrue: false } : item
-                                  )
-                                )
-                              }
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                                !q.isTrue
-                                  ? 'bg-rose-500/25 border-rose-400 text-rose-300'
-                                  : 'bg-white/[0.04] border-white/10 text-slate-400'
-                              }`}
-                            >
-                              Sai
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDraftTf((prev) => prev.filter((_, i) => i !== idx))}
-                              className="text-rose-400 hover:text-rose-300 p-1 cursor-pointer"
-                              title="Xóa câu này"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDraftTf((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-rose-400 hover:text-rose-300 p-1 cursor-pointer"
+                            title="Xóa câu này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
-                        <input
-                          type="text"
-                          value={q.statement}
+                        <textarea
+                          rows={2}
+                          value={q.prompt || ''}
                           onChange={(e) =>
                             setDraftTf((prev) =>
                               prev.map((item, i) =>
-                                i === idx ? { ...item, statement: e.target.value } : item
+                                i === idx ? { ...item, prompt: e.target.value } : item
                               )
                             )
                           }
-                          placeholder="Nhập phát biểu / câu hỏi Đúng hoặc Sai *"
-                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400"
+                          placeholder="Nhập đề bài / câu dẫn chung (VD: Cho hai góc lượng giác a và b thỏa mãn... Xét tính đúng/sai của các mệnh đề sau:)"
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400 resize-y"
                         />
+
+                        {/* Bảng soạn các ý nhỏ a), b), c), d), e)... */}
+                        <div className="overflow-x-auto rounded-xl border border-white/10">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-cyan-500/10 border-b border-white/10 text-[11px] font-bold text-cyan-300">
+                                <th className="py-2 px-2.5 w-11 text-center border-r border-white/10">Ý</th>
+                                <th className="py-2 px-2.5 border-r border-white/10">Nội dung khẳng định</th>
+                                <th className="py-2 px-2 w-16 text-center border-r border-white/10">Đúng</th>
+                                <th className="py-2 px-2 w-16 text-center border-r border-white/10">Sai</th>
+                                <th className="py-2 px-2 w-10 text-center">Xóa</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/10">
+                              {(q.items || []).map((subItem, subIdx) => (
+                                <tr key={subItem.id || subIdx}>
+                                  <td className="py-2 px-2.5 text-center text-xs font-bold text-white border-r border-white/10">
+                                    {getSubItemLabel(subIdx)}
+                                  </td>
+                                  <td className="py-1.5 px-2 border-r border-white/10">
+                                    <input
+                                      type="text"
+                                      value={subItem.text}
+                                      onChange={(e) =>
+                                        setDraftTf((prev) =>
+                                          prev.map((question, qIdx) => {
+                                            if (qIdx !== idx) return question;
+                                            const nextItems = (question.items || []).map((it, sIdx) =>
+                                              sIdx === subIdx ? { ...it, text: e.target.value } : it
+                                            );
+                                            return { ...question, items: nextItems };
+                                          })
+                                        )
+                                      }
+                                      placeholder={`Nhập nội dung khẳng định ý ${getSubItemLabel(subIdx)} *`}
+                                      className="w-full px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 px-2 text-center border-r border-white/10">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setDraftTf((prev) =>
+                                          prev.map((question, qIdx) => {
+                                            if (qIdx !== idx) return question;
+                                            const nextItems = (question.items || []).map((it, sIdx) =>
+                                              sIdx === subIdx ? { ...it, isTrue: true } : it
+                                            );
+                                            return { ...question, items: nextItems };
+                                          })
+                                        )
+                                      }
+                                      className={`w-7 h-7 mx-auto rounded-lg border text-xs font-bold flex items-center justify-center cursor-pointer ${
+                                        subItem.isTrue
+                                          ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300'
+                                          : 'bg-white/[0.04] border-white/10 text-slate-500 hover:text-white'
+                                      }`}
+                                      title="Đáp án Đúng"
+                                    >
+                                      {subItem.isTrue ? '✓' : ''}
+                                    </button>
+                                  </td>
+                                  <td className="py-1.5 px-2 text-center border-r border-white/10">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setDraftTf((prev) =>
+                                          prev.map((question, qIdx) => {
+                                            if (qIdx !== idx) return question;
+                                            const nextItems = (question.items || []).map((it, sIdx) =>
+                                              sIdx === subIdx ? { ...it, isTrue: false } : it
+                                            );
+                                            return { ...question, items: nextItems };
+                                          })
+                                        )
+                                      }
+                                      className={`w-7 h-7 mx-auto rounded-lg border text-xs font-bold flex items-center justify-center cursor-pointer ${
+                                        !subItem.isTrue
+                                          ? 'bg-rose-500/25 border-rose-400 text-rose-300'
+                                          : 'bg-white/[0.04] border-white/10 text-slate-500 hover:text-white'
+                                      }`}
+                                      title="Đáp án Sai"
+                                    >
+                                      {!subItem.isTrue ? '✓' : ''}
+                                    </button>
+                                  </td>
+                                  <td className="py-1.5 px-2 text-center">
+                                    {(q.items || []).length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setDraftTf((prev) =>
+                                            prev.map((question, qIdx) =>
+                                              qIdx === idx
+                                                ? {
+                                                    ...question,
+                                                    items: (question.items || []).filter(
+                                                      (_, sIdx) => sIdx !== subIdx
+                                                    ),
+                                                  }
+                                                : question
+                                            )
+                                          )
+                                        }
+                                        className="p-1 text-rose-400 hover:text-rose-300 cursor-pointer"
+                                        title="Xóa ý này"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraftTf((prev) =>
+                                prev.map((question, qIdx) =>
+                                  qIdx === idx
+                                    ? { ...question, items: [...(question.items || []), EMPTY_TF_ITEM()] }
+                                    : question
+                                )
+                              )
+                            }
+                            className="px-2.5 py-1 rounded-lg glass-button text-[11px] font-semibold text-cyan-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Thêm ý ({getSubItemLabel((q.items || []).length)})</span>
+                          </button>
+                        </div>
 
                         <input
                           type="text"
@@ -1027,7 +1182,7 @@ export default function ReinforcementExercisePanel({
                               )
                             )
                           }
-                          placeholder="Giải thích đáp án (tùy chọn)"
+                          placeholder="Giải thích đáp án chung cho câu này (tùy chọn)"
                           className="w-full px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400"
                         />
                       </div>
