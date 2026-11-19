@@ -427,8 +427,9 @@ export default function ReinforcementExercisePanel({
                     </div>
 
                     {isSubmitted && q.explanation && (
-                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300">
-                        <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                        <strong className="text-emerald-300">Giải thích:</strong>{' '}
+                        {q.explanation}
                       </div>
                     )}
                   </div>
@@ -545,8 +546,9 @@ export default function ReinforcementExercisePanel({
                   </div>
 
                   {isSubmitted && q.explanation && (
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300">
-                      <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                      <strong className="text-emerald-300">Giải thích:</strong>{' '}
+                      {q.explanation}
                     </div>
                   )}
                 </div>
@@ -962,8 +964,8 @@ export default function ReinforcementExercisePanel({
                           })}
                         </div>
 
-                        <input
-                          type="text"
+                        <textarea
+                          rows={2}
                           value={q.explanation || ''}
                           onChange={(e) =>
                             setDraftMc((prev) =>
@@ -972,8 +974,8 @@ export default function ReinforcementExercisePanel({
                               )
                             )
                           }
-                          placeholder="Giải thích đáp án (tùy chọn)"
-                          className="w-full px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
+                          placeholder="Giải thích đáp án (tùy chọn - nhấn Enter để xuống dòng)"
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs leading-relaxed resize-y focus:outline-none focus:border-purple-400"
                         />
                       </div>
                     ))}
@@ -1172,8 +1174,8 @@ export default function ReinforcementExercisePanel({
                           </button>
                         </div>
 
-                        <input
-                          type="text"
+                        <textarea
+                          rows={3}
                           value={q.explanation || ''}
                           onChange={(e) =>
                             setDraftTf((prev) =>
@@ -1182,8 +1184,8 @@ export default function ReinforcementExercisePanel({
                               )
                             )
                           }
-                          placeholder="Giải thích đáp án chung cho câu này (tùy chọn)"
-                          className="w-full px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-400"
+                          placeholder="Giải thích đáp án chung cho câu này (tùy chọn - nhấn Enter để xuống dòng)"
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs leading-relaxed resize-y focus:outline-none focus:border-cyan-400"
                         />
                       </div>
                     ))}
