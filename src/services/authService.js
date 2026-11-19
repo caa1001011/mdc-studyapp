@@ -170,6 +170,64 @@ export async function createNewUser({ username, password, fullName, title, role 
 }
 
 /**
+ * Tự đăng ký tài khoản mới dành riêng cho Học sinh (khóa cứng role = 'student')
+ */
+export async function registerStudentAccount({ username, password, fullName, className = '' }) {
+  if (!db) {
+    throw new Error('Chưa kết nối Firebase Firestore.');
+  }
+
+  await ensureAdminAccount();
+
+  const cleanFullName = String(fullName || '').trim();
+  if (!cleanFullName) {
+    throw new Error('Vui lòng nhập họ và tên.');
+  }
+
+  const cleanUsername = String(username || '').trim().toLowerCase();
+  if (cleanUsername.length < 3) {
+    throw new Error('Tên đăng nhập phải có ít nhất 3 ký tự.');
+  }
+  if (!/^[a-z0-9_.-]+$/.test(cleanUsername)) {
+    throw new Error('Tên đăng nhập chỉ được chứa chữ cái không dấu, chữ số, dấu chấm, gạch dưới hoặc gạch ngang.');
+  }
+  if (cleanUsername === 'admin') {
+    throw new Error('Tên đăng nhập này không được phép sử dụng. Vui lòng chọn tên khác.');
+  }
+
+  const cleanPassword = String(password || '').trim();
+  if (cleanPassword.length < 6) {
+    throw new Error('Mật khẩu phải có ít nhất 6 ký tự.');
+  }
+
+  const userRef = doc(db, USERS_COLLECTION, cleanUsername);
+  const existingSnap = await getDoc(userRef);
+  if (existingSnap.exists()) {
+    throw new Error(`Tên đăng nhập "${cleanUsername}" đã tồn tại. Vui lòng chọn tên khác.`);
+  }
+
+  const cleanClass = String(className || '').trim();
+  const studentDoc = {
+    username: cleanUsername,
+    password: cleanPassword,
+    fullName: cleanFullName,
+    title: cleanClass || 'Học sinh',
+    role: 'student',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    level: 1,
+    xp: 0,
+    nextLevelXp: 1000,
+    streakDays: 1,
+    todayStudyMinutes: 0,
+    dailyGoalMinutes: 180,
+    createdAt: new Date().toISOString(),
+  };
+
+  await setDoc(userRef, studentDoc);
+  return studentDoc;
+}
+
+/**
  * Cập nhật thông tin hoặc mật khẩu của tài khoản trên Firebase Firestore
  */
 export async function updateExistingUser(username, updates) {
