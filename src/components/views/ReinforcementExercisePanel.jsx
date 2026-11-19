@@ -9,6 +9,8 @@ import {
   Save,
   X,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   XCircle,
   RotateCcw,
@@ -115,6 +117,7 @@ export default function ReinforcementExercisePanel({
 
   // Chế độ làm bài (người học & admin đều có thể mở làm thử)
   const [activeExercise, setActiveExercise] = useState(null);
+  const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [mcAnswers, setMcAnswers] = useState({});
   const [tfAnswers, setTfAnswers] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -370,12 +373,14 @@ export default function ReinforcementExercisePanel({
 
   const handleOpenExercise = (exercise) => {
     setActiveExercise(exercise);
+    setCurrentStepIdx(0);
     setMcAnswers({});
     setTfAnswers({});
     setIsSubmitted(false);
   };
 
   const handleRetry = () => {
+    setCurrentStepIdx(0);
     setMcAnswers({});
     setTfAnswers({});
     setIsSubmitted(false);
@@ -425,6 +430,205 @@ export default function ReinforcementExercisePanel({
       mcList.filter((q) => mcAnswers[q.id] !== undefined).length +
       allTfItems.filter((item) => tfAnswers[item.id] !== undefined).length;
 
+    const orderedSteps = [
+      ...mcList.map((q, idx) => ({ kind: 'mc', q, partIdx: idx })),
+      ...tfList.map((q, idx) => ({ kind: 'tf', q, partIdx: idx })),
+    ];
+    const safeStepIdx = Math.min(currentStepIdx, Math.max(0, orderedSteps.length - 1));
+    const activeStep = orderedSteps[safeStepIdx] || null;
+
+    const isStepAnswered = (step) => {
+      if (step.kind === 'mc') return mcAnswers[step.q.id] !== undefined;
+      const items = step.q.items || [];
+      return items.length > 0 && items.every((it) => tfAnswers[it.id] !== undefined);
+    };
+
+    const renderMcCard = (q, idx) => {
+      const selectedOpt = mcAnswers[q.id];
+      const isCorrect = isSubmitted && selectedOpt === q.correctIndex;
+      return (
+        <div
+          key={q.id || idx}
+          className="p-4 sm:p-5 rounded-2xl glass-card border border-white/10 space-y-3.5"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs sm:text-sm font-bold text-white leading-relaxed whitespace-pre-line">
+              <span className="text-purple-300 mr-1.5">Câu {idx + 1}:</span>
+              {q.question}
+            </p>
+            {isSubmitted &&
+              (isCorrect ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {(q.options || []).map((opt, optIdx) => {
+              const isPicked = selectedOpt === optIdx;
+              const isRightOpt = q.correctIndex === optIdx;
+              let styleClass =
+                'bg-white/[0.03] border-white/10 text-slate-300 hover:border-purple-400/40';
+
+              if (isSubmitted) {
+                if (isRightOpt) {
+                  styleClass = 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 font-semibold';
+                } else if (isPicked && !isRightOpt) {
+                  styleClass = 'bg-rose-500/20 border-rose-400/60 text-rose-200';
+                }
+              } else if (isPicked) {
+                styleClass = 'bg-purple-600/25 border-purple-400/70 text-white font-semibold';
+              }
+
+              return (
+                <button
+                  key={optIdx}
+                  type="button"
+                  disabled={isSubmitted}
+                  onClick={() => setMcAnswers((prev) => ({ ...prev, [q.id]: optIdx }))}
+                  className={`p-3 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-start gap-2.5 ${
+                    isSubmitted ? 'cursor-default' : 'cursor-pointer'
+                  } ${styleClass}`}
+                >
+                  <span className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-[11px] font-bold shrink-0">
+                    {OPTION_LABELS[optIdx]}
+                  </span>
+                  <span className="leading-snug">{opt}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {isSubmitted && q.explanation && (
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+              <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const renderTfCard = (q, idx) => {
+      const qStat = tfQuestionScores[q.id];
+      const showLetters = (q.items || []).length > 1;
+      return (
+        <div
+          key={q.id || idx}
+          className="p-4 sm:p-5 rounded-2xl glass-card border border-white/10 space-y-3.5"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs sm:text-sm font-bold text-white leading-relaxed whitespace-pre-line">
+              <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
+              {q.prompt || 'Xét tính đúng/sai của các mệnh đề sau:'}
+            </p>
+            {isSubmitted && qStat && (
+              <span className="px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[11px] font-bold shrink-0">
+                +{formatScore(qStat.score)}đ ({qStat.correct}/{qStat.total} ý)
+              </span>
+            )}
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-purple-500/10 border-b border-white/10 text-[11px] sm:text-xs font-bold text-purple-300">
+                  {showLetters && (
+                    <th className="py-2.5 px-3 w-12 text-center border-r border-white/10">Ý</th>
+                  )}
+                  <th className="py-2.5 px-3 border-r border-white/10">Nội dung khẳng định</th>
+                  <th className="py-2.5 px-3 w-20 text-center border-r border-white/10">Đúng</th>
+                  <th className="py-2.5 px-3 w-20 text-center">Sai</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10 text-xs sm:text-sm">
+                {(q.items || []).map((item, subIdx) => {
+                  const picked = tfAnswers[item.id];
+                  const isItemCorrect = isSubmitted && picked === item.isTrue;
+                  return (
+                    <tr
+                      key={item.id || subIdx}
+                      className={
+                        isSubmitted
+                          ? isItemCorrect
+                            ? 'bg-emerald-500/[0.06]'
+                            : 'bg-rose-500/[0.06]'
+                          : 'hover:bg-white/[0.02]'
+                      }
+                    >
+                      {showLetters && (
+                        <td className="py-2.5 px-3 text-center font-bold text-white border-r border-white/10 align-middle">
+                          {getSubItemLabel(subIdx)}
+                        </td>
+                      )}
+                      <td className="py-2.5 px-3 text-slate-200 border-r border-white/10 align-middle leading-relaxed">
+                        <div className="flex items-start justify-between gap-2">
+                          <span>{item.text}</span>
+                          {isSubmitted &&
+                            (isItemCorrect ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                            ))}
+                        </div>
+                      </td>
+                      {[true, false].map((val) => {
+                        const isPicked = picked === val;
+                        const isRightVal = item.isTrue === val;
+                        let cellBtnClass =
+                          'border-white/20 bg-white/[0.04] text-slate-400 hover:border-cyan-400/60';
+                        if (isSubmitted) {
+                          if (isRightVal) {
+                            cellBtnClass =
+                              'border-emerald-400 bg-emerald-500/25 text-emerald-300 font-bold';
+                          } else if (isPicked && !isRightVal) {
+                            cellBtnClass =
+                              'border-rose-400 bg-rose-500/25 text-rose-300 font-bold';
+                          }
+                        } else if (isPicked) {
+                          cellBtnClass =
+                            'border-cyan-400 bg-cyan-500/25 text-cyan-200 font-bold';
+                        }
+
+                        return (
+                          <td
+                            key={String(val)}
+                            className={`py-2 px-2 text-center align-middle ${
+                              val ? 'border-r border-white/10' : ''
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              disabled={isSubmitted}
+                              onClick={() =>
+                                setTfAnswers((prev) => ({ ...prev, [item.id]: val }))
+                              }
+                              className={`w-7 h-7 mx-auto rounded-lg border flex items-center justify-center text-xs transition-all ${
+                                isSubmitted ? 'cursor-default' : 'cursor-pointer'
+                              } ${cellBtnClass}`}
+                              aria-label={val ? 'Đúng' : 'Sai'}
+                            >
+                              {isPicked || (isSubmitted && isRightVal) ? '✓' : ''}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {isSubmitted && q.explanation && (
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+              <strong className="text-emerald-300">Giải thích:</strong> {q.explanation}
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-5">
         {/* Thanh đầu trang làm bài */}
@@ -444,8 +648,12 @@ export default function ReinforcementExercisePanel({
               </h3>
               <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
                 <span>{mcList.length} câu trắc nghiệm</span>
-                <span>•</span>
-                <span>{tfList.length} câu Đúng/Sai</span>
+                {tfList.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <span>{tfList.length} câu Đúng/Sai</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -468,242 +676,142 @@ export default function ReinforcementExercisePanel({
               </button>
             </div>
           ) : (
-            <span className="text-xs font-semibold text-purple-300 shrink-0">
-              Đã chọn: {answeredCount}/{totalCount} câu
-            </span>
+            <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+              <span className="text-xs font-semibold text-purple-300">
+                Đã chọn: {answeredCount}/{totalCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSubmitted(true)}
+                disabled={answeredCount === 0}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 disabled:opacity-45 cursor-pointer"
+              >
+                Nộp bài
+              </button>
+            </div>
           )}
         </div>
 
-        {/* Phần I: Trắc nghiệm 4 lựa chọn */}
-        {mcList.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-purple-300 flex items-center gap-2">
-              <ListChecks className="w-4 h-4" />
-              <span>Phần I. Trắc nghiệm 4 lựa chọn ({mcList.length} câu)</span>
-            </h4>
+        {/* CHẾ ĐỘ ĐANG LÀM BÀI: HIỂN THỊ TỪNG CÂU + NÚT CÂU TRƯỚC ĐÓ / CÂU TIẾP THEO */}
+        {!isSubmitted && activeStep ? (
+          <div className="max-w-3xl mx-auto space-y-4">
+            {/* Thanh tiến độ & chọn nhanh số câu */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl glass-card border border-white/10">
+              <div className="flex items-center gap-2 text-xs font-bold">
+                {activeStep.kind === 'mc' ? (
+                  <span className="inline-flex items-center gap-1.5 text-purple-300">
+                    <ListChecks className="w-4 h-4" />
+                    <span>Trắc nghiệm 4 lựa chọn</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-cyan-300">
+                    <ToggleLeft className="w-4 h-4" />
+                    <span>Câu hỏi Đúng / Sai</span>
+                  </span>
+                )}
+                <span className="text-slate-400">
+                  • Câu <strong className="text-white">{safeStepIdx + 1}</strong> / {orderedSteps.length}
+                </span>
+              </div>
 
-            <div className="space-y-3">
-              {mcList.map((q, idx) => {
-                const selectedOpt = mcAnswers[q.id];
-                const isCorrect = isSubmitted && selectedOpt === q.correctIndex;
-                return (
-                  <div
-                    key={q.id || idx}
-                    className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
-                        <span className="text-purple-300 mr-1.5">Câu {idx + 1}:</span>
-                        {q.question}
-                      </p>
-                      {isSubmitted && (
-                        isCorrect ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                        )
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {(q.options || []).map((opt, optIdx) => {
-                        const isPicked = selectedOpt === optIdx;
-                        const isRightOpt = q.correctIndex === optIdx;
-                        let styleClass =
-                          'bg-white/[0.03] border-white/10 text-slate-300 hover:border-purple-400/40';
-
-                        if (isSubmitted) {
-                          if (isRightOpt) {
-                            styleClass = 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 font-semibold';
-                          } else if (isPicked && !isRightOpt) {
-                            styleClass = 'bg-rose-500/20 border-rose-400/60 text-rose-200';
-                          }
-                        } else if (isPicked) {
-                          styleClass = 'bg-purple-600/25 border-purple-400/70 text-white font-semibold';
-                        }
-
-                        return (
-                          <button
-                            key={optIdx}
-                            type="button"
-                            disabled={isSubmitted}
-                            onClick={() => setMcAnswers((prev) => ({ ...prev, [q.id]: optIdx }))}
-                            className={`p-3 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-start gap-2.5 ${
-                              isSubmitted ? 'cursor-default' : 'cursor-pointer'
-                            } ${styleClass}`}
-                          >
-                            <span className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-[11px] font-bold shrink-0">
-                              {OPTION_LABELS[optIdx]}
-                            </span>
-                            <span className="leading-snug">{opt}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {isSubmitted && q.explanation && (
-                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-                        <strong className="text-emerald-300">Giải thích:</strong>{' '}
-                        {q.explanation}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {orderedSteps.map((step, sIdx) => {
+                  const isCurrent = sIdx === safeStepIdx;
+                  const done = isStepAnswered(step);
+                  return (
+                    <button
+                      key={`${step.kind}-${step.q.id || sIdx}`}
+                      type="button"
+                      onClick={() => setCurrentStepIdx(sIdx)}
+                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-purple-600 text-white border border-purple-400 shadow-md shadow-purple-500/30'
+                          : done
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                          : 'bg-white/[0.04] text-slate-400 border border-white/10 hover:text-white'
+                      }`}
+                    >
+                      {sIdx + 1}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Phần II: Câu hỏi Đúng / Sai (dạng bảng mệnh đề a, b, c, d...) */}
-        {tfList.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
-              <ToggleLeft className="w-4 h-4" />
-              <span>Phần II. Câu hỏi Đúng / Sai ({tfList.length} câu)</span>
-            </h4>
+            {activeStep.kind === 'mc'
+              ? renderMcCard(activeStep.q, activeStep.partIdx)
+              : renderTfCard(activeStep.q, activeStep.partIdx)}
 
-            <div className="space-y-4">
-              {tfList.map((q, idx) => {
-                const qStat = tfQuestionScores[q.id];
-                return (
-                <div
-                  key={q.id || idx}
-                  className="p-4 rounded-2xl glass-card border border-white/10 space-y-3"
+            {/* Thanh điều hướng Câu trước đó / Câu tiếp theo */}
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <button
+                type="button"
+                disabled={safeStepIdx === 0}
+                onClick={() => setCurrentStepIdx((prev) => Math.max(0, prev - 1))}
+                className="px-4 py-2.5 rounded-xl glass-button text-xs sm:text-sm font-semibold text-slate-200 hover:text-white disabled:opacity-35 disabled:pointer-events-none inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Câu trước đó</span>
+              </button>
+
+              {safeStepIdx + 1 < orderedSteps.length ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentStepIdx((prev) => Math.min(orderedSteps.length - 1, prev + 1))
+                  }
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/25 inline-flex items-center gap-1.5 cursor-pointer"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
-                      <span className="text-cyan-300 mr-1.5">Câu {idx + 1}:</span>
-                      {q.prompt || 'Xét tính đúng/sai của các mệnh đề sau:'}
-                    </p>
-                    {isSubmitted && qStat && (
-                      <span className="px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[11px] font-bold shrink-0">
-                        +{formatScore(qStat.score)}đ ({qStat.correct}/{qStat.total} ý)
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="overflow-x-auto rounded-xl border border-white/10">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-purple-500/10 border-b border-white/10 text-[11px] sm:text-xs font-bold text-purple-300">
-                          <th className="py-2.5 px-3 w-12 text-center border-r border-white/10">Ý</th>
-                          <th className="py-2.5 px-3 border-r border-white/10">Nội dung khẳng định</th>
-                          <th className="py-2.5 px-3 w-20 text-center border-r border-white/10">Đúng</th>
-                          <th className="py-2.5 px-3 w-20 text-center">Sai</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/10 text-xs sm:text-sm">
-                        {(q.items || []).map((item, subIdx) => {
-                          const picked = tfAnswers[item.id];
-                          const isItemCorrect = isSubmitted && picked === item.isTrue;
-                          return (
-                            <tr
-                              key={item.id || subIdx}
-                              className={
-                                isSubmitted
-                                  ? isItemCorrect
-                                    ? 'bg-emerald-500/[0.06]'
-                                    : 'bg-rose-500/[0.06]'
-                                  : 'hover:bg-white/[0.02]'
-                              }
-                            >
-                              <td className="py-2.5 px-3 text-center font-bold text-white border-r border-white/10 align-middle">
-                                {getSubItemLabel(subIdx)}
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-200 border-r border-white/10 align-middle leading-relaxed">
-                                <div className="flex items-start justify-between gap-2">
-                                  <span>{item.text}</span>
-                                  {isSubmitted &&
-                                    (isItemCorrect ? (
-                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                                    ) : (
-                                      <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                                    ))}
-                                </div>
-                              </td>
-                              {[true, false].map((val) => {
-                                const isPicked = picked === val;
-                                const isRightVal = item.isTrue === val;
-                                let cellBtnClass =
-                                  'border-white/20 bg-white/[0.04] text-slate-400 hover:border-cyan-400/60';
-                                if (isSubmitted) {
-                                  if (isRightVal) {
-                                    cellBtnClass =
-                                      'border-emerald-400 bg-emerald-500/25 text-emerald-300 font-bold';
-                                  } else if (isPicked && !isRightVal) {
-                                    cellBtnClass =
-                                      'border-rose-400 bg-rose-500/25 text-rose-300 font-bold';
-                                  }
-                                } else if (isPicked) {
-                                  cellBtnClass =
-                                    'border-cyan-400 bg-cyan-500/25 text-cyan-200 font-bold';
-                                }
-
-                                return (
-                                  <td
-                                    key={String(val)}
-                                    className={`py-2 px-2 text-center align-middle ${
-                                      val ? 'border-r border-white/10' : ''
-                                    }`}
-                                  >
-                                    <button
-                                      type="button"
-                                      disabled={isSubmitted}
-                                      onClick={() =>
-                                        setTfAnswers((prev) => ({ ...prev, [item.id]: val }))
-                                      }
-                                      className={`w-7 h-7 mx-auto rounded-lg border flex items-center justify-center text-xs transition-all ${
-                                        isSubmitted ? 'cursor-default' : 'cursor-pointer'
-                                      } ${cellBtnClass}`}
-                                      aria-label={val ? 'Đúng' : 'Sai'}
-                                    >
-                                      {isPicked || (isSubmitted && isRightVal) ? '✓' : ''}
-                                    </button>
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {isSubmitted && q.explanation && (
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-                      <strong className="text-emerald-300">Giải thích:</strong>{' '}
-                      {q.explanation}
-                    </div>
-                  )}
-                </div>
-                );
-              })}
+                  <span>Câu tiếp theo</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsSubmitted(true)}
+                  disabled={answeredCount === 0}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 cursor-pointer"
+                >
+                  Nộp bài &amp; Xem kết quả
+                </button>
+              )}
             </div>
           </div>
-        )}
+        ) : (
+          /* SAU KHI NỘP BÀI: HIỂN THỊ TOÀN BỘ ĐÁP ÁN & LỜI GIẢI CHI TIẾT */
+          <>
+            {mcList.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-purple-300 flex items-center gap-2">
+                  <ListChecks className="w-4 h-4" />
+                  <span>Phần I. Trắc nghiệm 4 lựa chọn ({mcList.length} câu)</span>
+                </h4>
+                <div className="space-y-3">{mcList.map((q, idx) => renderMcCard(q, idx))}</div>
+              </div>
+            )}
 
-        {/* Thanh nộp bài */}
-        <div className="flex items-center justify-end gap-2.5 pt-2">
-          {!isSubmitted ? (
-            <button
-              type="button"
-              onClick={() => setIsSubmitted(true)}
-              disabled={answeredCount === 0}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-600/25 disabled:opacity-50 cursor-pointer"
-            >
-              Nộp bài &amp; Xem kết quả
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>Làm lại bài tập</span>
-            </button>
-          )}
-        </div>
+            {tfList.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
+                  <ToggleLeft className="w-4 h-4" />
+                  <span>Phần II. Câu hỏi Đúng / Sai ({tfList.length} câu)</span>
+                </h4>
+                <div className="space-y-4">{tfList.map((q, idx) => renderTfCard(q, idx))}</div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Làm lại bài tập</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   }

@@ -9,7 +9,6 @@ import {
   Keyboard,
   Plus,
   BookOpen,
-  Wand2,
   Trash2,
   Upload,
   Loader2,
@@ -40,8 +39,7 @@ import {
   saveUserFlashcardDeck,
   deleteUserFlashcardDeck,
   compressCoverImage,
-  renderPdfCoverToDataUrl,
-  generateFlashcardsFromDocument
+  renderPdfCoverToDataUrl
 } from '../../services/flashcardService';
 import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
@@ -99,18 +97,12 @@ export default function FlashcardView({ currentUser: propsUser }) {
   const [editingTextbookDeck, setEditingTextbookDeck] = useState(null);
   const [createTarget, setCreateTarget] = useState('personal'); // 'personal' | 'textbook'
   const [bookCategory, setBookCategory] = useState('global_success'); // 'global_success' | 'extended'
-  const [createMethod, setCreateMethod] = useState('manual'); // 'manual' | 'ai'
   const [deckTitle, setDeckTitle] = useState('');
   const [selectedBookIdForDeck, setSelectedBookIdForDeck] = useState('');
   const [bookName, setBookName] = useState('');
   const [grade, setGrade] = useState('');
   const [draftCards, setDraftCards] = useState([EMPTY_CARD()]);
 
-  // AI Document import state
-  const [docText, setDocText] = useState('');
-  const [docFile, setDocFile] = useState(null);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [aiPreviewReady, setAiPreviewReady] = useState(false);
   const [modalError, setModalError] = useState('');
   const [isSavingDeck, setIsSavingDeck] = useState(false);
   const [isDecksCollapsed, setIsDecksCollapsed] = useState(() => {
@@ -242,15 +234,11 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setEditingTextbookDeck(null);
     setCreateTarget(target);
     setBookCategory(options.category || 'global_success');
-    setCreateMethod('manual');
     setDeckTitle('');
     setSelectedBookIdForDeck(options.bookId || '');
     setBookName(options.bookName || '');
     setGrade(options.grade || '');
     setDraftCards([EMPTY_CARD()]);
-    setDocText('');
-    setDocFile(null);
-    setAiPreviewReady(false);
     setModalError('');
     setIsCreateModalOpen(true);
   };
@@ -260,7 +248,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
     if (e) e.stopPropagation();
     setEditingPersonalDeck(deck);
     setCreateTarget('personal');
-    setCreateMethod(deck.creationMethod === 'ai' ? 'ai' : 'manual');
     setDeckTitle(deck.title || '');
     setBookName('');
     setGrade('');
@@ -269,9 +256,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
         ? deck.cards.map((c) => ({ ...EMPTY_CARD(), ...c }))
         : [EMPTY_CARD()]
     );
-    setDocText('');
-    setDocFile(null);
-    setAiPreviewReady(false);
     setModalError('');
     setIsCreateModalOpen(true);
   };
@@ -283,7 +267,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
     setEditingTextbookDeck(deck);
     setCreateTarget('textbook');
     setBookCategory(deck.category || activeBookFolder?.category || 'global_success');
-    setCreateMethod('manual');
     setDeckTitle(deck.title || '');
     setSelectedBookIdForDeck(deck.bookId || activeBookFolder?.id || '');
     setBookName(deck.bookName || activeBookFolder?.name || '');
@@ -293,9 +276,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
         ? deck.cards.map((c) => ({ ...EMPTY_CARD(), ...c }))
         : [EMPTY_CARD()]
     );
-    setDocText('');
-    setDocFile(null);
-    setAiPreviewReady(false);
     setModalError('');
     setIsCreateModalOpen(true);
   };
@@ -500,60 +480,6 @@ export default function FlashcardView({ currentUser: propsUser }) {
     });
   };
 
-  // Đọc file tài liệu (.pdf, .doc, .docx, .txt, .md, .csv, .rtf)
-  const handleDocumentFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setModalError('');
-
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isPlainText = ['txt', 'md', 'csv', 'rtf'].includes(ext) || file.type.startsWith('text/');
-
-    const reader = new FileReader();
-    if (isPlainText) {
-      reader.onload = (ev) => {
-        setDocText(String(ev.target?.result || ''));
-        setDocFile(null);
-      };
-      reader.readAsText(file, 'UTF-8');
-    } else {
-      reader.onload = (ev) => {
-        const dataUrl = String(ev.target?.result || '');
-        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-        const mimeMap = {
-          pdf: 'application/pdf',
-          doc: 'application/msword',
-          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        };
-        setDocFile({
-          name: file.name,
-          mimeType: file.type || mimeMap[ext] || 'application/octet-stream',
-          base64,
-        });
-      };
-      reader.readAsDataURL(file);
-    }
-    e.target.value = '';
-  };
-
-  // Gọi AI tạo thẻ từ tài liệu
-  const handleGenerateWithAI = async () => {
-    setModalError('');
-    setIsGeneratingAI(true);
-    try {
-      const generated = await generateFlashcardsFromDocument({
-        text: docText,
-        fileData: docFile,
-      });
-      setDraftCards(generated);
-      setAiPreviewReady(true);
-    } catch (err) {
-      setModalError(err.message || 'Không thể tạo thẻ từ tài liệu.');
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
-
   const handleUpdateDraftCard = (index, field, value) => {
     setDraftCards((prev) =>
       prev.map((card, i) => (i === index ? { ...card, [field]: value } : card))
@@ -606,7 +532,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
           id: editingPersonalDeck?.id,
           title: deckTitle,
           cards: validCards,
-          creationMethod: editingPersonalDeck?.creationMethod || createMethod,
+          creationMethod: editingPersonalDeck?.creationMethod || 'manual',
         });
         setPersonalDecks((prev) => [saved, ...prev.filter((d) => d.id !== saved.id)]);
         if (!editingPersonalDeck) {
@@ -1134,7 +1060,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                     <Plus className="w-6 h-6" />
                   </span>
                   <span className="text-xs font-bold text-purple-300 text-center">
-                    {activeBookFolder.category === 'extended' ? 'Thêm bộ thẻ' : 'Thêm Unit'}
+                    Thêm bộ thẻ
                   </span>
                 </button>
               )}
@@ -1551,7 +1477,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </h3>
                 <p className="text-xs text-slate-400">
                   {createTarget === 'textbook'
-                    ? 'Tạo bộ thẻ flashcard bằng cách nhập thủ công hoặc dùng AI tạo từ file PDF / TXT rồi xem trước'
+                    ? 'Tạo bộ thẻ flashcard bằng cách nhập thủ công'
                     : 'Bộ thẻ sẽ được lưu riêng trong mục "Bộ thẻ cá nhân" của tài khoản bạn'}
                 </p>
               </div>
@@ -1633,109 +1559,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                 </div>
               )}
 
-              {/* Chuyển đổi phương pháp: Nhập thủ công | Đưa tài liệu cho AI tạo */}
-              <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.04] border border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setCreateMethod('manual')}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    createMethod === 'manual'
-                      ? 'bg-purple-600/35 text-white border border-purple-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Nhập Thủ Công</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCreateMethod('ai')}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    createMethod === 'ai'
-                      ? 'bg-purple-600/35 text-white border border-purple-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Wand2 className="w-3.5 h-3.5" />
-                  <span>Đưa Tài Liệu Cho AI Tạo</span>
-                </button>
-              </div>
-
-              {/* Khu vực AI tạo từ tài liệu */}
-              {createMethod === 'ai' && (
-                <div className="p-4 rounded-2xl bg-white/[0.03] border border-purple-500/30 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                      <Wand2 className="w-3.5 h-3.5" />
-                      Đưa file PDF / TXT hoặc dán nội dung để AI tạo thẻ xem trước
-                    </span>
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-200 cursor-pointer">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Chọn File PDF / TXT</span>
-                      <input
-                        type="file"
-                        accept=".pdf,.txt,.doc,.docx,.md,.csv,.rtf"
-                        onChange={handleDocumentFileUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {docFile && (
-                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-purple-500/15 border border-purple-400/30 text-xs text-purple-200">
-                      <span className="truncate font-semibold">Đã chọn tệp: {docFile.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setDocFile(null)}
-                        className="p-1 rounded-lg hover:bg-purple-500/30 text-purple-200 cursor-pointer shrink-0"
-                        title="Bỏ chọn tệp"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  <textarea
-                    rows={5}
-                    value={docText}
-                    onChange={(e) => setDocText(e.target.value)}
-                    placeholder="Dán đoạn văn Tiếng Anh hoặc danh sách từ vựng từ tài liệu của bạn vào đây..."
-                    className="w-full p-3 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-400"
-                  />
-
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleGenerateWithAI}
-                      disabled={isGeneratingAI || (!docText.trim() && !docFile)}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                    >
-                      {isGeneratingAI ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>AI đang tạo thẻ...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>AI Tạo Thẻ Xem Trước</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {createMethod === 'ai' && aiPreviewReady && (
-                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-xs text-emerald-300 flex items-center justify-between gap-2">
-                  <span className="font-semibold">
-                    ✓ AI đã tạo {draftCards.length} thẻ xem trước. Bạn có thể kiểm tra và chỉnh sửa từng thẻ bên dưới trước khi xuất!
-                  </span>
-                </div>
-              )}
-
-              {/* Danh sách thẻ soạn thảo / xem trước */}
+              {/* Danh sách thẻ nhập thủ công */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300">
@@ -1835,7 +1659,7 @@ export default function FlashcardView({ currentUser: propsUser }) {
                   ) : (
                     <>
                       <Save className="w-3.5 h-3.5" />
-                      <span>{createMethod === 'ai' ? 'Xuất & Lưu Bộ Thẻ' : 'Lưu Bộ Thẻ'}</span>
+                      <span>Lưu Bộ Thẻ</span>
                     </>
                   )}
                 </button>

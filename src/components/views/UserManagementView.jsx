@@ -186,9 +186,6 @@ export default function UserManagementView({ currentUser, onUserUpdated }) {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
             Quản Lý Tài Khoản Người Dùng
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Cấp tài khoản mới, phân quyền và quản lý mật khẩu học sinh trực tiếp trên cơ sở dữ liệu Firebase Firestore
-          </p>
         </div>
 
         <button
@@ -197,7 +194,7 @@ export default function UserManagementView({ currentUser, onUserUpdated }) {
           className="flex items-center gap-2 px-4 py-2.5 rounded-2xl glass-button text-xs font-semibold text-slate-200 hover:text-white self-start sm:self-auto"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
-          <span>Đồng bộ từ Firebase</span>
+          <span>Đồng bộ từ cơ sở dữ liệu</span>
         </button>
       </div>
 

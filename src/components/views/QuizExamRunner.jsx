@@ -360,7 +360,10 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
   }, [normalizedExam, isEnglish]);
 
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id || 'mc');
+  const [mcIndex, setMcIndex] = useState(0);
+  const [tfIndex, setTfIndex] = useState(0);
   const [activeReadingIdx, setActiveReadingIdx] = useState(0);
+  const [readingQIndex, setReadingQIndex] = useState(0);
   const [mcAnswers, setMcAnswers] = useState({});
   const [tfAnswers, setTfAnswers] = useState({});
   const [shortAnswers, setShortAnswers] = useState({});
@@ -414,7 +417,10 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
     setShortAnswers({});
     setIsSubmitted(false);
     setActiveSectionId(sections[0]?.id || 'mc');
+    setMcIndex(0);
+    setTfIndex(0);
     setActiveReadingIdx(0);
+    setReadingQIndex(0);
     setTimeLeft((normalizedExam.durationMinutes || 45) * 60);
   };
 
@@ -504,36 +510,184 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
             </div>
           )}
 
-          {/* PHẦN 1: TRẮC NGHIỆM 4 LỰA CHỌN */}
-          {activeSectionId === 'mc' && (
-            <div className="max-w-4xl mx-auto space-y-4">
-              {normalizedExam.mcQuestions.map((q, idx) => (
+          {/* PHẦN 1: TRẮC NGHIỆM 4 LỰA CHỌN (TỪNG CÂU + NÚT CÂU TRƯỚC ĐÓ / CÂU TIẾP THEO) */}
+          {activeSectionId === 'mc' && (() => {
+            const list = normalizedExam.mcQuestions;
+            const safeIdx = Math.min(mcIndex, Math.max(0, list.length - 1));
+            const currentQ = list[safeIdx];
+            if (!currentQ) return null;
+
+            return (
+              <div className="max-w-3xl mx-auto space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl glass-card border border-white/10">
+                  <span className="text-xs font-bold text-slate-300">
+                    Trắc nghiệm • Câu <strong className="text-white">{safeIdx + 1}</strong> / {list.length}
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {list.map((q, idx) => {
+                      const isCurrent = idx === safeIdx;
+                      const done = mcAnswers[q.id] !== undefined;
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => setMcIndex(idx)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'bg-purple-600 text-white border border-purple-400 shadow-md shadow-purple-500/30'
+                              : done
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                              : 'bg-white/[0.04] text-slate-400 border border-white/10 hover:text-white'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <McQuestionCard
-                  key={q.id}
-                  question={q}
-                  label={`Trắc nghiệm • Câu ${idx + 1}`}
-                  selectedIndex={mcAnswers[q.id]}
+                  question={currentQ}
+                  label={`Trắc nghiệm • Câu ${safeIdx + 1} / ${list.length}`}
+                  selectedIndex={mcAnswers[currentQ.id]}
                   onSelect={handleSelectMc}
                 />
-              ))}
-            </div>
-          )}
 
-          {/* PHẦN 2: ĐÚNG / SAI */}
-          {activeSectionId === 'tf' && (
-            <div className="max-w-4xl mx-auto space-y-4">
-              {normalizedExam.tfQuestions.map((q, idx) => (
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <button
+                    type="button"
+                    disabled={safeIdx === 0}
+                    onClick={() => setMcIndex((prev) => Math.max(0, prev - 1))}
+                    className="px-4 py-2.5 rounded-xl glass-button text-xs sm:text-sm font-semibold text-slate-200 hover:text-white disabled:opacity-35 disabled:pointer-events-none inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Câu trước đó</span>
+                  </button>
+
+                  {safeIdx + 1 < list.length ? (
+                    <button
+                      type="button"
+                      onClick={() => setMcIndex((prev) => Math.min(list.length - 1, prev + 1))}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/25 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Câu tiếp theo</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : currentSectionIdx + 1 < sections.length ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSectionId(sections[currentSectionIdx + 1].id)}
+                      className="px-5 py-2.5 rounded-xl bg-purple-600/40 border border-purple-400/40 text-white text-xs sm:text-sm font-semibold hover:bg-purple-600/60 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Sang phần {sections[currentSectionIdx + 1].label}</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/25 cursor-pointer"
+                    >
+                      Nộp Bài &amp; Xem Kết Quả
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* PHẦN 2: ĐÚNG / SAI (TỪNG CÂU + NÚT CÂU TRƯỚC ĐÓ / CÂU TIẾP THEO) */}
+          {activeSectionId === 'tf' && (() => {
+            const list = normalizedExam.tfQuestions;
+            const safeIdx = Math.min(tfIndex, Math.max(0, list.length - 1));
+            const currentQ = list[safeIdx];
+            if (!currentQ) return null;
+
+            return (
+              <div className="max-w-3xl mx-auto space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl glass-card border border-white/10">
+                  <span className="text-xs font-bold text-slate-300">
+                    {isEnglish ? 'True / False' : 'Đúng / Sai'} • Câu{' '}
+                    <strong className="text-white">{safeIdx + 1}</strong> / {list.length}
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {list.map((q, idx) => {
+                      const isCurrent = idx === safeIdx;
+                      const qAns = tfAnswers[q.id] || {};
+                      const done =
+                        (q.items || []).length > 0 &&
+                        q.items.every((it) => qAns[it.id] !== undefined);
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => setTfIndex(idx)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'bg-purple-600 text-white border border-purple-400 shadow-md shadow-purple-500/30'
+                              : done
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                              : 'bg-white/[0.04] text-slate-400 border border-white/10 hover:text-white'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <TrueFalseQuestionCard
-                  key={q.id}
-                  question={q}
-                  label={`${isEnglish ? 'True / False' : 'Đúng / Sai'} • Câu ${idx + 1}`}
-                  answers={tfAnswers[q.id] || {}}
+                  question={currentQ}
+                  label={`${isEnglish ? 'True / False' : 'Đúng / Sai'} • Câu ${safeIdx + 1} / ${list.length}`}
+                  answers={tfAnswers[currentQ.id] || {}}
                   onSelect={handleSelectTf}
                   isEnglish={isEnglish}
                 />
-              ))}
-            </div>
-          )}
+
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <button
+                    type="button"
+                    disabled={safeIdx === 0}
+                    onClick={() => setTfIndex((prev) => Math.max(0, prev - 1))}
+                    className="px-4 py-2.5 rounded-xl glass-button text-xs sm:text-sm font-semibold text-slate-200 hover:text-white disabled:opacity-35 disabled:pointer-events-none inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Câu trước đó</span>
+                  </button>
+
+                  {safeIdx + 1 < list.length ? (
+                    <button
+                      type="button"
+                      onClick={() => setTfIndex((prev) => Math.min(list.length - 1, prev + 1))}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/25 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Câu tiếp theo</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : currentSectionIdx + 1 < sections.length ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSectionId(sections[currentSectionIdx + 1].id)}
+                      className="px-5 py-2.5 rounded-xl bg-purple-600/40 border border-purple-400/40 text-white text-xs sm:text-sm font-semibold hover:bg-purple-600/60 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Sang phần {sections[currentSectionIdx + 1].label}</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/25 cursor-pointer"
+                    >
+                      Nộp Bài &amp; Xem Kết Quả
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* PHẦN 3 (NON-ENGLISH): TRẢ LỜI NGẮN (SỐ THỰC) */}
           {activeSectionId === 'short' && !isEnglish && (
@@ -587,7 +741,10 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setActiveReadingIdx(idx)}
+                      onClick={() => {
+                        setActiveReadingIdx(idx);
+                        setReadingQIndex(0);
+                      }}
                       className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                         activeReadingIdx === idx
                           ? 'bg-amber-500/25 text-amber-200 border-amber-400/60'
@@ -606,6 +763,10 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
                   normalizedExam.readingPassages[0];
                 if (!currentPassage) return null;
 
+                const subList = currentPassage.questions || [];
+                const safeSubIdx = Math.min(readingQIndex, Math.max(0, subList.length - 1));
+                const currentSubQ = subList[safeSubIdx];
+
                 return (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                     {/* BÊN TRÁI: ĐOẠN VĂN BÀI ĐỌC */}
@@ -621,27 +782,122 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
                       </div>
                     </div>
 
-                    {/* BÊN PHẢI: CÂU HỎI TRẮC NGHIỆM / ĐÚNG SAI */}
-                    <div className="lg:col-span-6 space-y-4 lg:max-h-[75vh] lg:overflow-y-auto lg:pr-1">
-                      {currentPassage.questions.map((subQ, qIdx) =>
-                        subQ.type === 'tf' ? (
+                    {/* BÊN PHẢI: HIỂN THỊ TỪNG CÂU HỎI + NÚT CÂU TRƯỚC ĐÓ / CÂU TIẾP THEO */}
+                    <div className="lg:col-span-6 space-y-4">
+                      {subList.length > 0 && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl glass-card border border-white/10">
+                          <span className="text-xs font-bold text-slate-300">
+                            Câu <strong className="text-white">{safeSubIdx + 1}</strong> / {subList.length}
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {subList.map((sq, qIdx) => {
+                              const isCurrent = qIdx === safeSubIdx;
+                              const done =
+                                sq.type === 'tf'
+                                  ? (sq.items || []).length > 0 &&
+                                    sq.items.every(
+                                      (it) => (tfAnswers[sq.id] || {})[it.id] !== undefined
+                                    )
+                                  : mcAnswers[sq.id] !== undefined;
+                              return (
+                                <button
+                                  key={sq.id}
+                                  type="button"
+                                  onClick={() => setReadingQIndex(qIdx)}
+                                  className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    isCurrent
+                                      ? 'bg-purple-600 text-white border border-purple-400 shadow-md shadow-purple-500/30'
+                                      : done
+                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                                      : 'bg-white/[0.04] text-slate-400 border border-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  {qIdx + 1}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {currentSubQ &&
+                        (currentSubQ.type === 'tf' ? (
                           <TrueFalseQuestionCard
-                            key={subQ.id}
-                            question={subQ}
-                            label={`Reading • Câu ${qIdx + 1} (True / False)`}
-                            answers={tfAnswers[subQ.id] || {}}
+                            question={currentSubQ}
+                            label={`Reading • Câu ${safeSubIdx + 1} / ${subList.length} (True / False)`}
+                            answers={tfAnswers[currentSubQ.id] || {}}
                             onSelect={handleSelectTf}
                             isEnglish={true}
                           />
                         ) : (
                           <McQuestionCard
-                            key={subQ.id}
-                            question={subQ}
-                            label={`Reading • Câu ${qIdx + 1} (Trắc nghiệm)`}
-                            selectedIndex={mcAnswers[subQ.id]}
+                            question={currentSubQ}
+                            label={`Reading • Câu ${safeSubIdx + 1} / ${subList.length} (Trắc nghiệm)`}
+                            selectedIndex={mcAnswers[currentSubQ.id]}
                             onSelect={handleSelectMc}
                           />
-                        )
+                        ))}
+
+                      {subList.length > 0 && (
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <button
+                            type="button"
+                            disabled={safeSubIdx === 0 && activeReadingIdx === 0}
+                            onClick={() => {
+                              if (safeSubIdx > 0) {
+                                setReadingQIndex((prev) => prev - 1);
+                              } else if (activeReadingIdx > 0) {
+                                const prevPassage = normalizedExam.readingPassages[activeReadingIdx - 1];
+                                setActiveReadingIdx(activeReadingIdx - 1);
+                                setReadingQIndex(Math.max(0, (prevPassage?.questions?.length || 1) - 1));
+                              }
+                            }}
+                            className="px-4 py-2.5 rounded-xl glass-button text-xs sm:text-sm font-semibold text-slate-200 hover:text-white disabled:opacity-35 disabled:pointer-events-none inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                            <span>Câu trước đó</span>
+                          </button>
+
+                          {safeSubIdx + 1 < subList.length ? (
+                            <button
+                              type="button"
+                              onClick={() => setReadingQIndex((prev) => prev + 1)}
+                              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/25 inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span>Câu tiếp theo</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          ) : activeReadingIdx + 1 < normalizedExam.readingPassages.length ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveReadingIdx((prev) => prev + 1);
+                                setReadingQIndex(0);
+                              }}
+                              className="px-5 py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/50 text-amber-200 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span>Bài đọc tiếp theo</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          ) : currentSectionIdx + 1 < sections.length ? (
+                            <button
+                              type="button"
+                              onClick={() => setActiveSectionId(sections[currentSectionIdx + 1].id)}
+                              className="px-5 py-2.5 rounded-xl bg-purple-600/40 border border-purple-400/40 text-white text-xs sm:text-sm font-semibold hover:bg-purple-600/60 inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span>Sang phần {sections[currentSectionIdx + 1].label}</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleSubmit}
+                              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/25 cursor-pointer"
+                            >
+                              Nộp Bài &amp; Xem Kết Quả
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -679,37 +935,39 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
             </div>
           )}
 
-          {/* Điều hướng chuyển phần & Nộp bài ở đáy trang */}
-          <div className="max-w-4xl mx-auto flex items-center justify-between pt-3">
-            <button
-              type="button"
-              disabled={currentSectionIdx <= 0}
-              onClick={() => setActiveSectionId(sections[currentSectionIdx - 1].id)}
-              className="px-4 py-2.5 rounded-xl glass-button text-xs font-semibold text-slate-300 hover:text-white disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Phần Trước</span>
-            </button>
+          {/* Điều hướng chuyển phần & Nộp bài ở đáy trang (chỉ dùng cho phần cuộn: Trả lời ngắn & Tự luận) */}
+          {(activeSectionId === 'short' || activeSectionId === 'essay') && (
+            <div className="max-w-4xl mx-auto flex items-center justify-between pt-3">
+              <button
+                type="button"
+                disabled={currentSectionIdx <= 0}
+                onClick={() => setActiveSectionId(sections[currentSectionIdx - 1].id)}
+                className="px-4 py-2.5 rounded-xl glass-button text-xs font-semibold text-slate-300 hover:text-white disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Phần Trước</span>
+              </button>
 
-            {currentSectionIdx + 1 < sections.length ? (
-              <button
-                type="button"
-                onClick={() => setActiveSectionId(sections[currentSectionIdx + 1].id)}
-                className="px-5 py-2.5 rounded-xl bg-purple-600/40 border border-purple-400/40 text-white text-xs font-semibold hover:bg-purple-600/60 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Phần Tiếp Theo ({sections[currentSectionIdx + 1].label})</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/30 hover:scale-[1.02] transition-all cursor-pointer"
-              >
-                Nộp Bài & Xem Kết Quả
-              </button>
-            )}
-          </div>
+              {currentSectionIdx + 1 < sections.length ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveSectionId(sections[currentSectionIdx + 1].id)}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600/40 border border-purple-400/40 text-white text-xs font-semibold hover:bg-purple-600/60 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Phần Tiếp Theo ({sections[currentSectionIdx + 1].label})</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/30 hover:scale-[1.02] transition-all cursor-pointer"
+                >
+                  Nộp Bài &amp; Xem Kết Quả
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         /* ============================================================ */
