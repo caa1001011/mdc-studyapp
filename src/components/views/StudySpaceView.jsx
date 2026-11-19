@@ -737,7 +737,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     ? selectedSubject.name
                     : usesFolders
                     ? `${subjectCategoryFolders.length} bài học`
-                    : `${currentTabLessons.length} bài tập`}
+                    : `${reinforcementExercises.filter((ex) => ex.subjectId === selectedSubject.id).length} bài tập`}
                 </p>
               </div>
             </div>
