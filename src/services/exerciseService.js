@@ -276,6 +276,61 @@ function parseExerciseFromText(rawText) {
   return { mcQuestions, tfQuestions };
 }
 
+const POSITION_DEPENDENT_OPTION_RE =
+  /(cả\s*[a-d]|tất cả\s*(các)?\s*(đáp án|phương án|ý)\s*(trên|đều)|all of the above|both [a-d] and [a-d]|none of the above|không có đáp án nào)/i;
+
+/**
+ * Xáo trộn ngẫu nhiên nhưng phân bố đều vị trí đáp án đúng (A, B, C, D) cho các câu trắc nghiệm AI tạo
+ * Giữ nguyên thứ tự nếu câu có phương án phụ thuộc vị trí (VD: "Cả A và B", "Tất cả các đáp án trên")
+ */
+function shuffleMcQuestionsBalanced(questions) {
+  if (!Array.isArray(questions) || questions.length === 0) return [];
+
+  // Tạo danh sách vị trí đích cân bằng (0, 1, 2, 3 lặp đều rồi xáo trộn Fisher-Yates)
+  const targetSlots = [];
+  for (let i = 0; i < questions.length; i++) {
+    targetSlots.push(i % 4);
+  }
+  for (let i = targetSlots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [targetSlots[i], targetSlots[j]] = [targetSlots[j], targetSlots[i]];
+  }
+
+  return questions.map((q, qIdx) => {
+    const opts = Array.isArray(q.options) ? [...q.options] : ['', '', '', ''];
+    if (opts.length !== 4 || opts.some((o) => POSITION_DEPENDENT_OPTION_RE.test(String(o || '')))) {
+      return q;
+    }
+
+    const correctIdx = Math.min(3, Math.max(0, Number(q.correctIndex) || 0));
+    const correctText = opts[correctIdx];
+    const distractors = opts.filter((_, i) => i !== correctIdx);
+
+    // Xáo trộn 3 phương án nhiễu
+    for (let i = distractors.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
+    }
+
+    const targetIdx = targetSlots[qIdx];
+    const nextOptions = [];
+    let dPointer = 0;
+    for (let slot = 0; slot < 4; slot++) {
+      if (slot === targetIdx) {
+        nextOptions.push(correctText);
+      } else {
+        nextOptions.push(distractors[dPointer++]);
+      }
+    }
+
+    return {
+      ...q,
+      options: nextOptions,
+      correctIndex: targetIdx,
+    };
+  });
+}
+
 /**
  * Gọi AI (Gemini 2.5 Flash) hoặc bộ phân tích văn bản để tạo Bài tập củng cố
  * - Môn Tiếng Anh: mặc định 10 câu Trắc nghiệm 1 lựa chọn (0 câu Đúng/Sai)
@@ -330,6 +385,7 @@ Yêu cầu bắt buộc:
 - Tạo ĐÚNG ${targetMc} câu hỏi trắc nghiệm một lựa chọn (4 phương án A, B, C, D) trong mảng "mcQuestions".
 - KHÔNG tạo câu hỏi Đúng/Sai ("tfQuestions" bắt buộc là mảng rỗng []).
 - Câu hỏi bám sát chương trình THPT, đa dạng từ vựng, ngữ pháp, đọc hiểu ngắn phù hợp với bài học; giải thích ngắn gọn, rõ ràng (có thể dùng \\n để xuống dòng).
+- PHÂN BỐ ĐÁP ÁN ĐÚNG: Phân bố đều vị trí đáp án đúng (correctIndex) ngẫu nhiên giữa 0, 1, 2, 3 (tương ứng A, B, C, D), KHÔNG dồn vào 0 (A). Trong phần explanation hãy nêu trực tiếp nội dung đáp án đúng, không ghi cứng "chọn A/B/C/D".
 
 Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdown, không giải thích ngoài JSON) theo cấu trúc sau:
 {
@@ -348,6 +404,7 @@ Yêu cầu bắt buộc:
 - Đúng ${targetMc} câu hỏi trắc nghiệm 1 lựa chọn gồm 4 phương án A, B, C, D (mcQuestions)
 - Đúng ${targetTf} câu hỏi Đúng/Sai dạng chùm (tfQuestions): MỖI câu gồm 1 đề bài/câu dẫn chung ("prompt") và 4 ý khẳng định nhỏ a, b, c, d ("items") để học sinh xét Đúng hoặc Sai cho từng ý.
 - QUAN TRỌNG VỀ KÝ HIỆU TOÁN HỌC: TUYỆT ĐỐI KHÔNG sử dụng mã LaTeX (không dùng dấu $, \\frac, \\sqrt, \\alpha, \\pi, ^\\circ, \\cdot, \\text...). Hãy viết trực tiếp bằng ký hiệu toán học Unicode rõ ràng như: α, β, π, °, √, ², ³, ≤, ≥, ≠, ±, ·, ×, ⇒, ⇔, phân số viết dạng 1/2, √3/2, -3π/4, sin α, cos α.
+- PHÂN BỐ ĐÁP ÁN ĐÚNG: Phân bố đều vị trí đáp án đúng (correctIndex) ngẫu nhiên giữa 0, 1, 2, 3 (tương ứng A, B, C, D), KHÔNG dồn vào 0 (A). Trong phần explanation hãy giải thích trực tiếp giá trị/nội dung đúng, không ghi cứng "chọn A/B/C/D".
 
 Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdown, không giải thích ngoài JSON) theo cấu trúc sau:
 {
@@ -390,25 +447,27 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const mcQuestions = Array.isArray(parsed.mcQuestions)
-      ? parsed.mcQuestions
-          .filter((q) => q?.question && Array.isArray(q.options))
-          .map((q, idx) => {
-            const opts = q.options
-              .slice(0, 4)
-              .map((o) =>
-                formatMathText(String(o || '').replace(/^[A-Da-d]\s*[.):]\s*/, '').trim())
-              );
-            while (opts.length < 4) opts.push('');
-            return {
-              id: `mc-ai-${Date.now()}-${idx}`,
-              question: formatMathText(String(q.question).trim()),
-              options: opts,
-              correctIndex: Math.min(3, Math.max(0, Number(q.correctIndex) || 0)),
-              explanation: formatMathText(String(q.explanation || '').trim()),
-            };
-          })
-      : [];
+    const mcQuestions = shuffleMcQuestionsBalanced(
+      Array.isArray(parsed.mcQuestions)
+        ? parsed.mcQuestions
+            .filter((q) => q?.question && Array.isArray(q.options))
+            .map((q, idx) => {
+              const opts = q.options
+                .slice(0, 4)
+                .map((o) =>
+                  formatMathText(String(o || '').replace(/^[A-Da-d]\s*[.):]\s*/, '').trim())
+                );
+              while (opts.length < 4) opts.push('');
+              return {
+                id: `mc-ai-${Date.now()}-${idx}`,
+                question: formatMathText(String(q.question).trim()),
+                options: opts,
+                correctIndex: Math.min(3, Math.max(0, Number(q.correctIndex) || 0)),
+                explanation: formatMathText(String(q.explanation || '').trim()),
+              };
+            })
+        : []
+    );
 
     const tfQuestions = englishMode
       ? []
