@@ -21,7 +21,7 @@ export async function fetchReinforcementExercises() {
       snap.forEach((docSnap) => {
         items.push({ id: docSnap.id, ...docSnap.data() });
       });
-      const sorted = items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      const sorted = items.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sorted));
       } catch {
@@ -35,7 +35,10 @@ export async function fetchReinforcementExercises() {
 
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list)
+      ? list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+      : [];
   } catch {
     return [];
   }
@@ -83,7 +86,10 @@ export async function saveReinforcementExercise({
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     const current = raw ? JSON.parse(raw) : [];
-    const next = [payload, ...current.filter((item) => item.id !== exerciseId)];
+    const exists = current.some((item) => item.id === exerciseId);
+    const next = exists
+      ? current.map((item) => (item.id === exerciseId ? payload : item))
+      : [...current, payload];
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
   } catch {
     // ignore

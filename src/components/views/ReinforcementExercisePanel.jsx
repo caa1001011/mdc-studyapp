@@ -263,7 +263,7 @@ export default function ReinforcementExercisePanel({
           const exists = prev.some((item) => item.id === saved.id);
           return exists
             ? prev.map((item) => (item.id === saved.id ? saved : item))
-            : [saved, ...prev];
+            : [...prev, saved];
         });
       }
 
@@ -665,7 +665,7 @@ export default function ReinforcementExercisePanel({
           Chưa có bài tập củng cố kiến thức nào trong môn {subject?.name}.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {exercises.map((ex) => {
             const mcCount = ex.mcQuestions?.length || 0;
             const tfCount = ex.tfQuestions?.length || 0;
