@@ -27,6 +27,7 @@ import {
   canUserSeeExercise
 } from '../../services/exerciseService';
 import { useConfirmDelete } from '../ConfirmDeleteProvider';
+import { formatMathText } from '../../utils/mathFormat';
 
 const EMPTY_MC_QUESTION = () => ({
   id: `mc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -237,9 +238,11 @@ export default function ReinforcementExercisePanel({
         ? exercise.mcQuestions.map((q) => ({
             ...EMPTY_MC_QUESTION(),
             ...q,
+            question: formatMathText(q.question || ''),
             options: Array.isArray(q.options)
-              ? [0, 1, 2, 3].map((i) => q.options[i] || '')
+              ? [0, 1, 2, 3].map((i) => formatMathText(q.options[i] || ''))
               : ['', '', '', ''],
+            explanation: formatMathText(q.explanation || ''),
           }))
         : []
     );
@@ -266,23 +269,23 @@ export default function ReinforcementExercisePanel({
       .filter((q) => q.question.trim() && q.options.some((o) => o.trim()))
       .map((q) => ({
         ...q,
-        question: q.question.trim(),
-        options: q.options.map((o) => o.trim()),
-        explanation: (q.explanation || '').trim(),
+        question: formatMathText(q.question.trim()),
+        options: q.options.map((o) => formatMathText(o.trim())),
+        explanation: formatMathText((q.explanation || '').trim()),
       }));
 
     const validTf = draftTf
       .map((q) => ({
         ...q,
-        prompt: (q.prompt || '').trim(),
+        prompt: formatMathText((q.prompt || '').trim()),
         items: (q.items || [])
           .filter((it) => (it.text || '').trim())
           .map((it) => ({
             ...it,
-            text: it.text.trim(),
+            text: formatMathText(it.text.trim()),
             isTrue: Boolean(it.isTrue),
           })),
-        explanation: (q.explanation || '').trim(),
+        explanation: formatMathText((q.explanation || '').trim()),
       }))
       .filter((q) => q.items.length > 0);
 
@@ -382,7 +385,12 @@ export default function ReinforcementExercisePanel({
   // CHẾ ĐỘ LÀM BÀI TẬP CỦNG CỐ
   // ============================================================================
   if (activeExercise) {
-    const mcList = activeExercise.mcQuestions || [];
+    const mcList = (activeExercise.mcQuestions || []).map((q) => ({
+      ...q,
+      question: formatMathText(q.question || ''),
+      options: (q.options || []).map((o) => formatMathText(o || '')),
+      explanation: formatMathText(q.explanation || ''),
+    }));
     const tfList = (activeExercise.tfQuestions || [])
       .map((q, idx) => normalizeTfQuestion(q, idx))
       .filter(Boolean);

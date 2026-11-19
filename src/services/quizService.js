@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { generateGeminiText } from './geminiService';
+import { formatMathText } from '../utils/mathFormat';
 
 const EXAMS_COLLECTION = 'exam_quizzes';
 
@@ -60,14 +61,14 @@ export function isRealNumberEqual(userRaw, correctRaw) {
 export function normalizeMcQuestion(q, fallbackIdx = 0) {
   if (!q) return null;
   const rawOptions = Array.isArray(q.options) ? q.options : [];
-  const options = [0, 1, 2, 3].map((i) => String(rawOptions[i] ?? '').trim());
+  const options = [0, 1, 2, 3].map((i) => formatMathText(String(rawOptions[i] ?? '').trim()));
   return {
     id: q.id || `mc-${Date.now()}-${fallbackIdx}`,
     type: 'mc',
-    question: String(q.question || '').trim(),
+    question: formatMathText(String(q.question || '').trim()),
     options,
     correctIndex: Math.max(0, Math.min(3, Number(q.correctIndex) || 0)),
-    explanation: String(q.explanation || '').trim(),
+    explanation: formatMathText(String(q.explanation || '').trim()),
   };
 }
 
@@ -81,27 +82,27 @@ export function normalizeTfQuestion(q, fallbackIdx = 0) {
     return {
       id: baseId,
       type: 'tf',
-      prompt: String(q.prompt || q.question || '').trim(),
+      prompt: formatMathText(String(q.prompt || q.question || '').trim()),
       items: q.items.map((item, idx) => ({
         id: item.id || `${baseId}-item-${idx}`,
-        text: String(item.text || '').trim(),
+        text: formatMathText(String(item.text || '').trim()),
         isTrue: Boolean(item.isTrue),
       })),
-      explanation: String(q.explanation || '').trim(),
+      explanation: formatMathText(String(q.explanation || '').trim()),
     };
   }
   return {
     id: baseId,
     type: 'tf',
-    prompt: String(q.prompt || '').trim(),
+    prompt: formatMathText(String(q.prompt || '').trim()),
     items: [
       {
         id: `${baseId}-item-0`,
-        text: String(q.statement || q.question || '').trim(),
+        text: formatMathText(String(q.statement || q.question || '').trim()),
         isTrue: Boolean(q.isTrue),
       },
     ],
-    explanation: String(q.explanation || '').trim(),
+    explanation: formatMathText(String(q.explanation || '').trim()),
   };
 }
 
@@ -113,9 +114,9 @@ export function normalizeShortQuestion(q, fallbackIdx = 0) {
   return {
     id: q.id || `short-${Date.now()}-${fallbackIdx}`,
     type: 'short',
-    question: String(q.question || '').trim(),
+    question: formatMathText(String(q.question || '').trim()),
     correctAnswer: String(q.correctAnswer ?? '').trim(),
-    explanation: String(q.explanation || '').trim(),
+    explanation: formatMathText(String(q.explanation || '').trim()),
   };
 }
 
@@ -127,8 +128,8 @@ export function normalizeEssayQuestion(q, fallbackIdx = 0) {
   return {
     id: q.id || `essay-${Date.now()}-${fallbackIdx}`,
     type: 'essay',
-    question: String(q.question || '').trim(),
-    solutionGuide: String(q.solutionGuide || q.explanation || '').trim(),
+    question: formatMathText(String(q.question || '').trim()),
+    solutionGuide: formatMathText(String(q.solutionGuide || q.explanation || '').trim()),
   };
 }
 
@@ -647,7 +648,7 @@ Cấu trúc JSON bắt buộc:
     }
   ]
 }
-Lưu ý: correctAnswer trong shortQuestions phải là một số thực (VD: "12.5", "-3", "0.75"). Nếu tài liệu không có phần nào thì để mảng rỗng [].`;
+Lưu ý: correctAnswer trong shortQuestions phải là một số thực (VD: "12.5", "-3", "0.75"). TUYỆT ĐỐI KHÔNG sử dụng mã LaTeX (không dùng $, \\frac, \\sqrt, \\alpha, \\pi, ^\\circ, \\cdot...); hãy viết trực tiếp bằng ký hiệu toán học Unicode rõ ràng (α, β, π, °, √, ², ³, ≤, ≥, ≠, ±, ·, ×, ⇒, ⇔, phân số dạng 1/2, √3/2, -3π/4). Nếu tài liệu không có phần nào thì để mảng rỗng [].`;
 
     const parts = [{ text: promptText }];
     if (fileData?.base64 && fileData?.mimeType) {

@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { generateGeminiText } from './geminiService';
+import { formatMathText } from '../utils/mathFormat';
 
 const EXERCISES_COLLECTION = 'reinforcement_exercises';
 const LOCAL_STORAGE_KEY = 'lumina_reinforcement_exercises';
@@ -169,13 +170,13 @@ export function normalizeTfQuestion(q, fallbackIdx = 0) {
   if (Array.isArray(q.items)) {
     return {
       id: q.id || `tf-${Date.now()}-${fallbackIdx}`,
-      prompt: String(q.prompt || '').trim(),
+      prompt: formatMathText(String(q.prompt || '').trim()),
       items: q.items.map((item, idx) => ({
         id: item.id || `${q.id || `tf-${fallbackIdx}`}-item-${idx}`,
-        text: String(item.text || '').trim(),
+        text: formatMathText(String(item.text || '').trim()),
         isTrue: Boolean(item.isTrue),
       })),
-      explanation: String(q.explanation || '').trim(),
+      explanation: formatMathText(String(q.explanation || '').trim()),
     };
   }
   // Tương thích dữ liệu cũ (1 phát biểu đơn lẻ)
@@ -185,11 +186,11 @@ export function normalizeTfQuestion(q, fallbackIdx = 0) {
     items: [
       {
         id: `${q.id || `tf-${fallbackIdx}`}-item-0`,
-        text: String(q.statement || '').trim(),
+        text: formatMathText(String(q.statement || '').trim()),
         isTrue: Boolean(q.isTrue),
       },
     ],
-    explanation: String(q.explanation || '').trim(),
+    explanation: formatMathText(String(q.explanation || '').trim()),
   };
 }
 
@@ -346,6 +347,7 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
 Yêu cầu bắt buộc:
 - Đúng ${targetMc} câu hỏi trắc nghiệm 1 lựa chọn gồm 4 phương án A, B, C, D (mcQuestions)
 - Đúng ${targetTf} câu hỏi Đúng/Sai dạng chùm (tfQuestions): MỖI câu gồm 1 đề bài/câu dẫn chung ("prompt") và 4 ý khẳng định nhỏ a, b, c, d ("items") để học sinh xét Đúng hoặc Sai cho từng ý.
+- QUAN TRỌNG VỀ KÝ HIỆU TOÁN HỌC: TUYỆT ĐỐI KHÔNG sử dụng mã LaTeX (không dùng dấu $, \\frac, \\sqrt, \\alpha, \\pi, ^\\circ, \\cdot, \\text...). Hãy viết trực tiếp bằng ký hiệu toán học Unicode rõ ràng như: α, β, π, °, √, ², ³, ≤, ≥, ≠, ±, ·, ×, ⇒, ⇔, phân số viết dạng 1/2, √3/2, -3π/4, sin α, cos α.
 
 Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdown, không giải thích ngoài JSON) theo cấu trúc sau:
 {
@@ -392,14 +394,18 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
       ? parsed.mcQuestions
           .filter((q) => q?.question && Array.isArray(q.options))
           .map((q, idx) => {
-            const opts = q.options.slice(0, 4).map((o) => String(o || '').replace(/^[A-Da-d]\s*[.):]\s*/, '').trim());
+            const opts = q.options
+              .slice(0, 4)
+              .map((o) =>
+                formatMathText(String(o || '').replace(/^[A-Da-d]\s*[.):]\s*/, '').trim())
+              );
             while (opts.length < 4) opts.push('');
             return {
               id: `mc-ai-${Date.now()}-${idx}`,
-              question: String(q.question).trim(),
+              question: formatMathText(String(q.question).trim()),
               options: opts,
               correctIndex: Math.min(3, Math.max(0, Number(q.correctIndex) || 0)),
-              explanation: String(q.explanation || '').trim(),
+              explanation: formatMathText(String(q.explanation || '').trim()),
             };
           })
       : [];
@@ -413,15 +419,15 @@ Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ (không markdo
             if (Array.isArray(q.items)) {
               return {
                 id: `tf-ai-${Date.now()}-${idx}`,
-                prompt: String(q.prompt || '').trim(),
+                prompt: formatMathText(String(q.prompt || '').trim()),
                 items: q.items
                   .filter((it) => it?.text)
                   .map((it, subIdx) => ({
                     id: `tf-ai-${Date.now()}-${idx}-${subIdx}`,
-                    text: String(it.text).replace(/^[a-z]\)\s*/i, '').trim(),
+                    text: formatMathText(String(it.text).replace(/^[a-z]\)\s*/i, '').trim()),
                     isTrue: Boolean(it.isTrue),
                   })),
-                explanation: String(q.explanation || '').trim(),
+                explanation: formatMathText(String(q.explanation || '').trim()),
               };
             }
             return normalizeTfQuestion(q, idx);
