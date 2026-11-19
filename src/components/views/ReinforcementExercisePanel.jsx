@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ClipboardCheck,
   Plus,
@@ -15,13 +15,18 @@ import {
   XCircle,
   RotateCcw,
   ListChecks,
-  ToggleLeft
+  ToggleLeft,
+  Lock,
+  Globe,
+  BookOpen
 } from 'lucide-react';
 import {
   saveReinforcementExercise,
   deleteReinforcementExercise,
   generateReinforcementExerciseFromDocument,
-  normalizeTfQuestion
+  normalizeTfQuestion,
+  isEnglishSubject,
+  canUserSeeExercise
 } from '../../services/exerciseService';
 import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
@@ -74,18 +79,55 @@ function formatScore(val) {
 export default function ReinforcementExercisePanel({
   subject,
   exercises = [],
+  lessonFolders = [],
+  initialAiLesson = '',
+  onClearInitialAiLesson,
   isLoading = false,
   isAdmin = false,
   username = 'student',
   onExercisesChange,
 }) {
   const { requestDelete } = useConfirmDelete();
+  const isEnglish = isEnglishSubject(subject);
+  const defaultAiMc = isEnglish ? 10 : 8;
+  const defaultAiTf = isEnglish ? 0 : 2;
+
+  // Chỉ hiển thị các bài tập toàn hệ thống + bài tập AI cá nhân của chính tài khoản đang đăng nhập
+  const visibleExercises = useMemo(
+    () => exercises.filter((ex) => canUserSeeExercise(ex, username)),
+    [exercises, username]
+  );
+
+  // Danh sách tên bài học (unique) trong môn để chọn khi tạo câu hỏi bằng AI
+  const availableLessonNames = useMemo(() => {
+    const seen = new Set();
+    const names = [];
+    (lessonFolders || []).forEach((f) => {
+      const name = String(f?.name || '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        names.push(name);
+      }
+    });
+    return names.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+  }, [lessonFolders]);
 
   // Chế độ làm bài (người học & admin đều có thể mở làm thử)
   const [activeExercise, setActiveExercise] = useState(null);
   const [mcAnswers, setMcAnswers] = useState({});
   const [tfAnswers, setTfAnswers] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Modal tạo câu hỏi củng cố bằng AI theo bài học (dành cho CẢ Học sinh và Quản trị viên)
+  const [isQuickAiOpen, setIsQuickAiOpen] = useState(() => Boolean(initialAiLesson));
+  const [quickAiLesson, setQuickAiLesson] = useState(() => initialAiLesson || '');
+  const [quickAiCustomTopic, setQuickAiCustomTopic] = useState('');
+  const [quickAiExtraText, setQuickAiExtraText] = useState('');
+  const [quickAiApiKey, setQuickAiApiKey] = useState('');
+  const [isQuickGenerating, setIsQuickGenerating] = useState(false);
+  const [quickAiError, setQuickAiError] = useState('');
 
   // Modal tạo / chỉnh sửa bài tập (chỉ dành cho Admin)
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -95,11 +137,11 @@ export default function ReinforcementExercisePanel({
   const [draftMc, setDraftMc] = useState([EMPTY_MC_QUESTION()]);
   const [draftTf, setDraftTf] = useState([EMPTY_TF_QUESTION()]);
 
-  // State AI tạo đề từ file / tài liệu (mặc định chuẩn 8 trắc nghiệm + 2 đúng/sai)
+  // State AI tạo đề từ file / tài liệu (Tiếng Anh: 10 TN; môn khác: 8 TN + 2 Đ/S)
   const [docText, setDocText] = useState('');
   const [docFile, setDocFile] = useState(null);
-  const [aiMcCount, setAiMcCount] = useState(8);
-  const [aiTfCount, setAiTfCount] = useState(2);
+  const [aiMcCount, setAiMcCount] = useState(defaultAiMc);
+  const [aiTfCount, setAiTfCount] = useState(defaultAiTf);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreviewReady, setAiPreviewReady] = useState(false);
@@ -107,16 +149,99 @@ export default function ReinforcementExercisePanel({
   const [editorError, setEditorError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  const openQuickAiModal = (preselectedLesson = '') => {
+    const firstAvailable = preselectedLesson || availableLessonNames[0] || '';
+    setQuickAiLesson(firstAvailable);
+    setQuickAiCustomTopic('');
+    setQuickAiExtraText('');
+    setQuickAiError('');
+    setIsQuickAiOpen(true);
+  };
+
+  useEffect(() => {
+    if (initialAiLesson && onClearInitialAiLesson) {
+      onClearInitialAiLesson();
+    }
+  }, [initialAiLesson, onClearInitialAiLesson]);
+
+  const handleQuickGenerateWithAI = async (e) => {
+    e.preventDefault();
+    setQuickAiError('');
+
+    const chosenLesson = (quickAiLesson === '__custom__' ? quickAiCustomTopic : quickAiLesson || quickAiCustomTopic).trim();
+    if (!chosenLesson && !quickAiExtraText.trim()) {
+      setQuickAiError('Vui lòng chọn bài học hoặc nhập tên bài cần tạo câu hỏi củng cố.');
+      return;
+    }
+
+    setIsQuickGenerating(true);
+    try {
+      const result = await generateReinforcementExerciseFromDocument(
+        {
+          text: quickAiExtraText,
+          lessonTitle: chosenLesson,
+          mcCount: defaultAiMc,
+          tfCount: defaultAiTf,
+          subjectName: subject?.name || '',
+          isEnglish,
+        },
+        quickAiApiKey
+      );
+
+      if (isAdmin) {
+        // Quản trị viên: mở giao diện xem trước & chỉnh sửa rồi đăng áp dụng cho toàn hệ thống
+        setEditingExercise(null);
+        setEditorMode('ai');
+        setTitle(chosenLesson || `Bài tập củng cố ${subject?.name || ''}`);
+        setDraftMc(result.mcQuestions || []);
+        setDraftTf(result.tfQuestions || []);
+        setAiMcCount(defaultAiMc);
+        setAiTfCount(defaultAiTf);
+        setAiPreviewReady(true);
+        setEditorError('');
+        setIsQuickAiOpen(false);
+        setIsEditorOpen(true);
+      } else {
+        // Học sinh: tự động lưu riêng cho tài khoản học sinh đó và mở làm bài ngay
+        const exerciseTitle = chosenLesson
+          ? `${chosenLesson} (AI củng cố)`
+          : `AI củng cố • ${subject?.name || 'Bài học'}`;
+        const saved = await saveReinforcementExercise({
+          subjectId: subject.id,
+          subjectName: subject.name,
+          title: exerciseTitle,
+          lessonName: chosenLesson,
+          mcQuestions: result.mcQuestions || [],
+          tfQuestions: result.tfQuestions || [],
+          creationMethod: 'ai',
+          scope: 'personal',
+          ownerUsername: username,
+          createdBy: username,
+        });
+
+        if (onExercisesChange) {
+          onExercisesChange((prev) => [...prev.filter((item) => item.id !== saved.id), saved]);
+        }
+        setIsQuickAiOpen(false);
+        handleOpenExercise(saved);
+      }
+    } catch (err) {
+      setQuickAiError(err.message || 'Không thể tạo câu hỏi củng cố bằng AI.');
+    } finally {
+      setIsQuickGenerating(false);
+    }
+  };
+
   const openCreateModal = () => {
     setEditingExercise(null);
     setEditorMode('manual');
     setTitle('');
     setDraftMc([EMPTY_MC_QUESTION()]);
-    setDraftTf([EMPTY_TF_QUESTION()]);
+    setDraftTf(isEnglish ? [] : [EMPTY_TF_QUESTION()]);
     setDocText('');
     setDocFile(null);
-    setAiMcCount(8);
-    setAiTfCount(2);
+    setAiMcCount(defaultAiMc);
+    setAiTfCount(defaultAiTf);
     setAiPreviewReady(false);
     setEditorError('');
     setIsEditorOpen(true);
@@ -193,9 +318,11 @@ export default function ReinforcementExercisePanel({
         {
           text: docText,
           fileData: docFile,
+          lessonTitle: title,
           mcCount: aiMcCount,
-          tfCount: aiTfCount,
+          tfCount: isEnglish ? 0 : aiTfCount,
           subjectName: subject?.name || '',
+          isEnglish,
         },
         geminiApiKey
       );
@@ -257,6 +384,8 @@ export default function ReinforcementExercisePanel({
         mcQuestions: validMc,
         tfQuestions: validTf,
         creationMethod: editingExercise?.creationMethod || editorMode,
+        scope: editingExercise?.scope || 'global',
+        ownerUsername: editingExercise?.ownerUsername || '',
         createdBy: editingExercise?.createdBy || username,
         createdAt: editingExercise?.createdAt || '',
       });
@@ -283,7 +412,10 @@ export default function ReinforcementExercisePanel({
 
   const handleDeleteExercise = (exercise, e) => {
     if (e) e.stopPropagation();
-    if (!isAdmin) return;
+    const isOwnPersonal =
+      exercise.scope === 'personal' &&
+      (exercise.ownerUsername === username || exercise.createdBy === username);
+    if (!isAdmin && !isOwnPersonal) return;
     const prevActive = activeExercise;
     let backupList = null;
 
@@ -660,20 +792,31 @@ export default function ReinforcementExercisePanel({
         <div className="flex items-center gap-2">
           <ClipboardCheck className="w-4 h-4 text-purple-300" />
           <h3 className="text-sm font-bold font-display text-white">
-            Danh sách bài tập củng cố ({exercises.length})
+            Danh sách bài tập củng cố ({visibleExercises.length})
           </h3>
         </div>
 
-        {isAdmin && (
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
             type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer self-start sm:self-auto"
+            onClick={() => openQuickAiModal()}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Tạo Bài Tập Củng Cố</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Tạo Câu Hỏi Bằng AI</span>
           </button>
-        )}
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl glass-button border border-purple-400/30 text-purple-200 hover:text-white text-xs font-bold cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tạo Thủ Công / Từ File</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
@@ -681,15 +824,28 @@ export default function ReinforcementExercisePanel({
           <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
           <p>Đang tải bài tập củng cố...</p>
         </div>
-      ) : exercises.length === 0 ? (
-        <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">
-          Chưa có bài tập củng cố kiến thức nào trong môn {subject?.name}.
+      ) : visibleExercises.length === 0 ? (
+        <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl space-y-3">
+          <p>Chưa có bài tập củng cố kiến thức nào trong môn {subject?.name}.</p>
+          <button
+            type="button"
+            onClick={() => openQuickAiModal()}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Tạo bộ câu hỏi đầu tiên bằng AI</span>
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {exercises.map((ex) => {
+          {visibleExercises.map((ex) => {
             const mcCount = ex.mcQuestions?.length || 0;
             const tfCount = ex.tfQuestions?.length || 0;
+            const isPersonal = ex.scope === 'personal';
+            const canDeleteThis =
+              isAdmin ||
+              (isPersonal && (ex.ownerUsername === username || ex.createdBy === username));
+
             return (
               <div
                 key={ex.id}
@@ -697,17 +853,39 @@ export default function ReinforcementExercisePanel({
                 className="p-4 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 cursor-pointer transition-all flex items-center justify-between gap-3 group"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="p-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 shrink-0">
-                    <ClipboardCheck className="w-4 h-4" />
+                  <div
+                    className={`p-2.5 rounded-xl border shrink-0 ${
+                      isPersonal
+                        ? 'bg-cyan-500/15 border-cyan-400/30 text-cyan-300'
+                        : 'bg-purple-500/15 border-purple-500/30 text-purple-300'
+                    }`}
+                  >
+                    {isPersonal ? (
+                      <Sparkles className="w-4 h-4" />
+                    ) : (
+                      <ClipboardCheck className="w-4 h-4" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
-                      {ex.title}
-                    </h4>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
+                        {ex.title}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 flex-wrap">
                       <span>{mcCount} trắc nghiệm</span>
-                      <span>•</span>
-                      <span>{tfCount} đúng/sai</span>
+                      {tfCount > 0 && (
+                        <>
+                          <span>•</span>
+                          <span>{tfCount} đúng/sai</span>
+                        </>
+                      )}
+                      {isPersonal && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-400/30 text-[10px] font-semibold text-cyan-300">
+                          <Lock className="w-2.5 h-2.5" />
+                          Riêng bạn
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -716,25 +894,25 @@ export default function ReinforcementExercisePanel({
                   <span className="text-xs font-semibold text-purple-300 mr-1">
                     Làm bài →
                   </span>
-                  {isAdmin && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => openEditModal(ex, e)}
-                        className="p-1.5 rounded-xl glass-button text-purple-300 hover:text-white cursor-pointer"
-                        title="Chỉnh sửa bài tập"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteExercise(ex, e)}
-                        className="p-1.5 rounded-xl glass-button text-rose-400 hover:bg-rose-500/20 cursor-pointer"
-                        title="Xóa bài tập"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
+                  {isAdmin && !isPersonal && (
+                    <button
+                      type="button"
+                      onClick={(e) => openEditModal(ex, e)}
+                      className="p-1.5 rounded-xl glass-button text-purple-300 hover:text-white cursor-pointer"
+                      title="Chỉnh sửa bài tập"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {canDeleteThis && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteExercise(ex, e)}
+                      className="p-1.5 rounded-xl glass-button text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                      title="Xóa bài tập"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -874,19 +1052,21 @@ export default function ReinforcementExercisePanel({
                         className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                        Số câu Đúng/Sai
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={30}
-                        value={aiTfCount}
-                        onChange={(e) => setAiTfCount(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
+                    {!isEnglish && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Số câu Đúng/Sai
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          value={aiTfCount}
+                          onChange={(e) => setAiTfCount(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs focus:outline-none focus:border-purple-400"
+                        />
+                      </div>
+                    )}
                     {!import.meta.env.VITE_GEMINI_API_KEY && (
                       <div className="col-span-2">
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
@@ -907,7 +1087,7 @@ export default function ReinforcementExercisePanel({
                     <button
                       type="button"
                       onClick={handleGenerateWithAI}
-                      disabled={isGeneratingAI || (!docText.trim() && !docFile)}
+                      disabled={isGeneratingAI || (!docText.trim() && !docFile && !title.trim())}
                       className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                     >
                       {isGeneratingAI ? (
@@ -1285,6 +1465,174 @@ export default function ReinforcementExercisePanel({
                     <>
                       <Save className="w-3.5 h-3.5" />
                       <span>{editingExercise ? 'Lưu Cập Nhật' : 'Đăng Bài Tập'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TẠO CÂU HỎI CỦNG CỐ BẰNG AI (DÀNH CHO CẢ HỌC SINH & QUẢN TRỊ VIÊN) */}
+      {isQuickAiOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/45 dark:bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-[#111322] border border-slate-200 dark:border-white/20 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-300">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-display text-slate-900 dark:text-white">
+                    Tạo Câu Hỏi Củng Cố Bằng AI
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {subject?.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isQuickGenerating}
+                onClick={() => setIsQuickAiOpen(false)}
+                className="p-2 rounded-xl glass-button text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickGenerateWithAI} className="p-6 space-y-4">
+              {quickAiError && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-600 dark:text-rose-300 text-xs font-semibold">
+                  {quickAiError}
+                </div>
+              )}
+
+              {/* Thông tin cấu trúc mặc định & phạm vi áp dụng */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-purple-500/10 border border-indigo-200 dark:border-purple-400/25 space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-purple-300 flex items-center gap-1">
+                    <BookOpen className="w-3 h-3" />
+                    <span>Cấu trúc câu hỏi</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-800 dark:text-white">
+                    {isEnglish
+                      ? '10 câu trắc nghiệm 1 lựa chọn'
+                      : '8 câu trắc nghiệm + 2 câu Đúng/Sai'}
+                  </p>
+                </div>
+
+                <div
+                  className={`p-3 rounded-2xl border space-y-1 ${
+                    isAdmin
+                      ? 'bg-emerald-50/70 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-400/25'
+                      : 'bg-cyan-50/70 dark:bg-cyan-500/10 border-cyan-200 dark:border-cyan-400/25'
+                  }`}
+                >
+                  <div
+                    className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                      isAdmin
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-cyan-700 dark:text-cyan-300'
+                    }`}
+                  >
+                    {isAdmin ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                    <span>Phạm vi áp dụng</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-800 dark:text-white">
+                    {isAdmin
+                      ? `Toàn hệ thống (môn ${subject?.name})`
+                      : 'Chỉ riêng tài khoản của bạn'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Chọn bài học */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Chọn bài học cần củng cố *
+                </label>
+                {availableLessonNames.length > 0 ? (
+                  <select
+                    value={quickAiLesson}
+                    onChange={(e) => setQuickAiLesson(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#181b2e] border border-slate-200 dark:border-white/15 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:border-purple-400"
+                  >
+                    {availableLessonNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                    <option value="__custom__">Khác (tự nhập tên bài học / chủ đề)...</option>
+                  </select>
+                ) : null}
+
+                {(availableLessonNames.length === 0 || quickAiLesson === '__custom__') && (
+                  <input
+                    type="text"
+                    value={quickAiCustomTopic}
+                    onChange={(e) => setQuickAiCustomTopic(e.target.value)}
+                    placeholder="VD: Bài 2: Công thức lượng giác"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.05] border border-slate-200 dark:border-white/15 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:border-purple-400"
+                  />
+                )}
+              </div>
+
+              {/* Nội dung bổ sung (tùy chọn) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Ghi chú / nội dung trọng tâm bổ sung (tùy chọn)
+                </label>
+                <textarea
+                  rows={3}
+                  value={quickAiExtraText}
+                  onChange={(e) => setQuickAiExtraText(e.target.value)}
+                  placeholder="Bạn có thể để trống để AI tự tạo theo tên bài học, hoặc dán thêm lý thuyết/dạng bài muốn tập trung..."
+                  className="w-full p-3 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              {!import.meta.env.VITE_GEMINI_API_KEY && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Gemini API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={quickAiApiKey}
+                    onChange={(e) => setQuickAiApiKey(e.target.value)}
+                    placeholder="Nhập Gemini API Key để AI tạo câu hỏi..."
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-white/10">
+                <button
+                  type="button"
+                  disabled={isQuickGenerating}
+                  onClick={() => setIsQuickAiOpen(false)}
+                  className="px-4 py-2.5 rounded-xl glass-button text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isQuickGenerating}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/25 flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                >
+                  {isQuickGenerating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>AI đang tạo 10 câu hỏi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>
+                        {isAdmin ? 'Tạo & Xem Trước (Toàn Hệ Thống)' : 'Tạo 10 Câu Hỏi & Làm Ngay'}
+                      </span>
                     </>
                   )}
                 </button>

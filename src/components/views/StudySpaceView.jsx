@@ -30,6 +30,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  Sparkles,
   X
 } from 'lucide-react';
 import { STUDY_SUBJECTS } from '../../data/mockData';
@@ -55,7 +56,10 @@ import {
   getSavedAppsScriptUrl,
   saveAppsScriptUrl
 } from '../../services/googleDriveService';
-import { fetchReinforcementExercises } from '../../services/exerciseService';
+import {
+  fetchReinforcementExercises,
+  canUserSeeExercise
+} from '../../services/exerciseService';
 import ReinforcementExercisePanel from './ReinforcementExercisePanel';
 import { useConfirmDelete } from '../ConfirmDeleteProvider';
 
@@ -148,6 +152,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
   // Lessons & Recent In-Progress Videos state
   const [allLessons, setAllLessons] = useState([]);
   const [reinforcementExercises, setReinforcementExercises] = useState([]);
+  const [pendingAiLesson, setPendingAiLesson] = useState('');
   const [isLoadingLessons, setIsLoadingLessons] = useState(true);
   const [lessonProgress, setLessonProgress] = useState({});
 
@@ -760,7 +765,7 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                     ? selectedSubject.name
                     : usesFolders
                     ? `${subjectCategoryFolders.length} bài học`
-                    : `${reinforcementExercises.filter((ex) => ex.subjectId === selectedSubject.id).length} bài tập`}
+                    : `${reinforcementExercises.filter((ex) => ex.subjectId === selectedSubject.id && canUserSeeExercise(ex, username)).length} bài tập`}
                 </p>
               </div>
             </div>
@@ -1068,7 +1073,9 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                 const TabIcon = tab.icon;
                 const tabCount =
                   tab.id === 'exercise'
-                    ? reinforcementExercises.filter((ex) => ex.subjectId === selectedSubject.id).length
+                    ? reinforcementExercises.filter(
+                        (ex) => ex.subjectId === selectedSubject.id && canUserSeeExercise(ex, username)
+                      ).length
                     : subjectLessons.filter((l) => getLessonCategory(l) === tab.id).length;
                 const isActive = activeCategory === tab.id;
 
@@ -1126,8 +1133,11 @@ export default function StudySpaceView({ currentUser: propsUser }) {
               <ReinforcementExercisePanel
                 subject={selectedSubject}
                 exercises={reinforcementExercises.filter(
-                  (ex) => ex.subjectId === selectedSubject.id
+                  (ex) => ex.subjectId === selectedSubject.id && canUserSeeExercise(ex, username)
                 )}
+                lessonFolders={folders.filter((f) => f.subjectId === selectedSubject.id)}
+                initialAiLesson={pendingAiLesson}
+                onClearInitialAiLesson={() => setPendingAiLesson('')}
                 isLoading={isLoadingLessons}
                 isAdmin={isAdmin}
                 username={username}
@@ -1320,6 +1330,18 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         </span>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingAiLesson(selectedFolder.name);
+                        setActiveCategory('exercise');
+                        setSelectedFolder(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer shrink-0"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Tạo câu hỏi củng cố bằng AI</span>
+                    </button>
                   </div>
                 )}
 
