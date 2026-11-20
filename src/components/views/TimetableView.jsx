@@ -411,7 +411,7 @@ export default function TimetableView({ currentUser: propsUser }) {
             <thead>
               <tr className="border-b border-white/15 bg-white/[0.04]">
                 {/* Column 0: Time Frame header - Gọn chiều ngang & chuẩn UI */}
-                <th className="py-2.5 px-2 w-[105px] whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 sticky left-0 z-20 bg-slate-50/95 dark:bg-[#0e101c]/95 backdrop-blur-md border-r border-slate-200 dark:border-white/10 text-center">
+                <th className="py-2.5 px-2.5 w-[125px] whitespace-nowrap font-display font-bold text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 sticky left-0 z-20 bg-slate-50/95 dark:bg-[#0e101c]/95 backdrop-blur-md border-r border-slate-200 dark:border-white/10 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span>Khung Giờ</span>
@@ -438,30 +438,33 @@ export default function TimetableView({ currentUser: propsUser }) {
                     key={slot.id}
                     className="group/row hover:bg-white/[0.02] transition-colors"
                   >
-                    {/* Sticky Left Column: Time Slot Info & Edit Controls - Gọn gàng */}
-                    <td className="py-1.5 px-2 w-[105px] whitespace-nowrap sticky left-0 z-10 bg-white/95 dark:bg-[#0c0d18]/95 backdrop-blur-md border-r border-slate-200 dark:border-white/10">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="min-w-0">
-                          <span className="font-display font-bold text-xs text-white block truncate leading-tight">
+                    {/* Sticky Left Column: Time Slot Info & Edit Controls - Chữ hiển thị tối đa đến mép cột */}
+                    <td className="py-1.5 px-2.5 w-[125px] whitespace-nowrap sticky left-0 z-10 bg-white/95 dark:bg-[#0c0d18]/95 backdrop-blur-md border-r border-slate-200 dark:border-white/10">
+                      <div className="relative min-w-0">
+                        <div className="min-w-0 w-full">
+                          <span
+                            title={slot.name}
+                            className="font-display font-bold text-xs text-slate-900 dark:text-white block w-full truncate leading-tight"
+                          >
                             {slot.name}
                           </span>
-                          <span className="text-[10px] font-mono text-purple-300 block leading-tight mt-0.5">
+                          <span className="text-[10px] font-mono text-purple-600 dark:text-purple-300 block leading-tight mt-0.5">
                             {slot.startTime} - {slot.endTime}
                           </span>
                         </div>
 
-                        {/* Slot Action buttons (appear on hover) */}
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
+                        {/* Slot Action buttons (nổi gọn trên góc phải khi hover, không chiếm diện tích tên tiết) */}
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-0.5 py-0.5 rounded-lg bg-white/95 dark:bg-[#0c0d18]/95 border border-slate-200/80 dark:border-white/15 shadow-sm opacity-0 pointer-events-none group-hover/row:opacity-100 group-hover/row:pointer-events-auto transition-opacity">
                           <button
                             onClick={() => handleOpenEditSlot(slot)}
-                            className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-white/[0.08] cursor-pointer"
+                            className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-slate-100 dark:hover:bg-white/[0.08] cursor-pointer"
                             title="Chỉnh sửa khung giờ này"
                           >
                             <Edit2 className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => handleDeleteSlot(slot.id)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-white/[0.08] cursor-pointer"
+                            className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-white/[0.08] cursor-pointer"
                             title="Xóa khung giờ này"
                           >
                             <Trash2 className="w-3 h-3" />
