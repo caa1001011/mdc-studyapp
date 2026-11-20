@@ -18,7 +18,9 @@ import {
   ToggleLeft,
   Lock,
   Globe,
-  BookOpen
+  BookOpen,
+  Folder,
+  Search
 } from 'lucide-react';
 import {
   saveReinforcementExercise,
@@ -78,6 +80,57 @@ function formatScore(val) {
     .replace('.', ',');
 }
 
+const OTHER_GROUP_NAME = 'Bài tập tổng hợp / Khác';
+
+function normalizeLessonKey(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/\(ai củng cố\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractLessonNumberTag(str) {
+  const m = String(str || '')
+    .toLowerCase()
+    .match(/\b(bài|unit|chương)\s*(\d+)\b/i);
+  return m ? `${m[1]}_${m[2]}` : '';
+}
+
+function resolveExerciseGroupName(ex, availableLessonNames = []) {
+  const candidates = [ex?.lessonName, ex?.title].filter(Boolean);
+  for (const raw of candidates) {
+    const norm = normalizeLessonKey(raw);
+    if (!norm) continue;
+    const exactMatch = availableLessonNames.find((name) => {
+      const n = normalizeLessonKey(name);
+      return n === norm || norm.startsWith(n) || n.startsWith(norm);
+    });
+    if (exactMatch) return exactMatch;
+
+    const tag = extractLessonNumberTag(raw);
+    if (tag) {
+      const tagMatch = availableLessonNames.find((name) => extractLessonNumberTag(name) === tag);
+      if (tagMatch) return tagMatch;
+    }
+  }
+
+  const customLesson = String(ex?.lessonName || '').trim();
+  if (customLesson) return customLesson;
+  return OTHER_GROUP_NAME;
+}
+
+function formatShortCreatedAt(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm} • ${hh}:${mi}`;
+}
+
 export default function ReinforcementExercisePanel({
   subject,
   exercises = [],
@@ -123,6 +176,11 @@ export default function ReinforcementExercisePanel({
   const [tfAnswers, setTfAnswers] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  // Điều hướng thư mục bài học + bộ lọc danh sách bài tập củng cố (Phương án 2)
+  const [selectedLessonGroup, setSelectedLessonGroup] = useState(null);
+  const [scopeFilter, setScopeFilter] = useState('all'); // 'all' | 'standard' | 'ai'
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Modal tạo câu hỏi củng cố bằng AI theo bài học (dành cho CẢ Học sinh và Quản trị viên)
   const [isQuickAiOpen, setIsQuickAiOpen] = useState(() => Boolean(initialAiLesson));
   const [quickAiLesson, setQuickAiLesson] = useState(() => initialAiLesson || '');
@@ -136,6 +194,7 @@ export default function ReinforcementExercisePanel({
   const [editingExercise, setEditingExercise] = useState(null);
   const [editorMode, setEditorMode] = useState('manual'); // 'manual' | 'ai'
   const [title, setTitle] = useState('');
+  const [draftLessonName, setDraftLessonName] = useState('');
   const [draftMc, setDraftMc] = useState([EMPTY_MC_QUESTION()]);
   const [draftTf, setDraftTf] = useState([EMPTY_TF_QUESTION()]);
   const [aiPreviewReady, setAiPreviewReady] = useState(false);
@@ -184,6 +243,7 @@ export default function ReinforcementExercisePanel({
         setEditingExercise(null);
         setEditorMode('ai');
         setTitle(chosenLesson || `Bài tập củng cố ${subject?.name || ''}`);
+        setDraftLessonName(chosenLesson || '');
         setDraftMc(result.mcQuestions || []);
         setDraftTf(result.tfQuestions || []);
         setAiPreviewReady(true);
@@ -305,6 +365,7 @@ export default function ReinforcementExercisePanel({
         subjectId: subject.id,
         subjectName: subject.name,
         title: title.trim(),
+        lessonName: draftLessonName || editingExercise?.lessonName || '',
         mcQuestions: validMc,
         tfQuestions: validTf,
         creationMethod: editingExercise?.creationMethod || editorMode,
@@ -843,31 +904,189 @@ export default function ReinforcementExercisePanel({
   // ============================================================================
   // DANH SÁCH BÀI TẬP CỦNG CỐ + MODAL TẠO / CHỈNH SỬA (ADMIN)
   // ============================================================================
+  // DANH SÁCH BÀI TẬP CỦNG CỐ GOM NHÓM THEO THƯ MỤC BÀI HỌC (PHƯƠNG ÁN 2)
+  // ============================================================================
+  const standardCountTotal = visibleExercises.filter((ex) => ex.scope !== 'personal').length;
+  const aiCountTotal = visibleExercises.filter((ex) => ex.scope === 'personal').length;
+
+  const groupedLessons = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    const map = new Map();
+
+    visibleExercises.forEach((ex) => {
+      const isPersonal = ex.scope === 'personal';
+      if (scopeFilter === 'standard' && isPersonal) return;
+      if (scopeFilter === 'ai' && !isPersonal) return;
+
+      const groupName = resolveExerciseGroupName(ex, availableLessonNames);
+      if (q) {
+        const matchGroup = groupName.toLowerCase().includes(q);
+        const matchTitle = String(ex.title || '').toLowerCase().includes(q);
+        if (!matchGroup && !matchTitle) return;
+      }
+
+      if (!map.has(groupName)) {
+        map.set(groupName, {
+          name: groupName,
+          standardItems: [],
+          aiItems: [],
+        });
+      }
+      const bucket = map.get(groupName);
+      if (isPersonal) {
+        bucket.aiItems.push(ex);
+      } else {
+        bucket.standardItems.push(ex);
+      }
+    });
+
+    const groups = Array.from(map.values()).map((g) => ({
+      ...g,
+      standardItems: [...g.standardItems].sort((a, b) =>
+        String(a.title || '').localeCompare(String(b.title || ''), 'vi', { numeric: true }),
+      ),
+      aiItems: [...g.aiItems].sort((a, b) => {
+        const ta = new Date(a.createdAt || 0).getTime() || 0;
+        const tb = new Date(b.createdAt || 0).getTime() || 0;
+        return tb - ta;
+      }),
+    }));
+
+    return groups.sort((a, b) => {
+      if (a.name === OTHER_GROUP_NAME) return 1;
+      if (b.name === OTHER_GROUP_NAME) return -1;
+      return a.name.localeCompare(b.name, 'vi', { numeric: true });
+    });
+  })();
+
+  const activeGroupObj = selectedLessonGroup
+    ? groupedLessons.find((g) => g.name === selectedLessonGroup) || null
+    : null;
+
+  const renderExerciseCard = (ex, aiOrderLabel = '') => {
+    const mcCount = ex.mcQuestions?.length || 0;
+    const tfCount = ex.tfQuestions?.length || 0;
+    const isPersonal = ex.scope === 'personal';
+    const canDeleteThis =
+      isAdmin || (isPersonal && (ex.ownerUsername === username || ex.createdBy === username));
+    const createdLabel = isPersonal ? formatShortCreatedAt(ex.createdAt) : '';
+
+    return (
+      <div
+        key={ex.id}
+        onClick={() => handleOpenExercise(ex)}
+        className="p-4 rounded-2xl glass-card border border-slate-200/80 dark:border-white/10 hover:border-purple-400/60 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            className={`p-2.5 rounded-xl border shrink-0 ${
+              isPersonal
+                ? 'bg-cyan-500/15 border-cyan-500/35 text-cyan-600 dark:text-cyan-300'
+                : 'bg-purple-500/15 border-purple-500/35 text-purple-600 dark:text-purple-300'
+            }`}
+          >
+            {isPersonal ? <Sparkles className="w-4 h-4" /> : <ClipboardCheck className="w-4 h-4" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {aiOrderLabel && (
+                <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/35 text-[10px] font-bold text-cyan-700 dark:text-cyan-300 shrink-0">
+                  {aiOrderLabel}
+                </span>
+              )}
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors">
+                {ex.title}
+              </h4>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex-wrap">
+              <span>{mcCount} trắc nghiệm</span>
+              {tfCount > 0 && (
+                <>
+                  <span>•</span>
+                  <span>{tfCount} đúng/sai</span>
+                </>
+              )}
+              {createdLabel && (
+                <>
+                  <span>•</span>
+                  <span>{createdLabel}</span>
+                </>
+              )}
+              {isPersonal && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-400/30 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
+                  <Lock className="w-2.5 h-2.5" />
+                  Riêng bạn
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-xs font-semibold text-purple-600 dark:text-purple-300 mr-1">
+            Làm bài →
+          </span>
+          {isAdmin && !isPersonal && (
+            <button
+              type="button"
+              onClick={(e) => openEditModal(ex, e)}
+              className="p-1.5 rounded-xl glass-button text-purple-600 dark:text-purple-300 hover:text-purple-800 dark:hover:text-white cursor-pointer"
+              title="Chỉnh sửa bài tập"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {canDeleteThis && (
+            <button
+              type="button"
+              onClick={(e) => handleDeleteExercise(ex, e)}
+              className="p-1.5 rounded-xl glass-button text-rose-500 dark:text-rose-400 hover:bg-rose-500/15 cursor-pointer"
+              title="Xóa bài tập"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
+      {/* Header & Nút tạo */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
-          <ClipboardCheck className="w-4 h-4 text-purple-300" />
-          <h3 className="text-sm font-bold font-display text-white">
-            Danh sách bài tập củng cố ({visibleExercises.length})
+          <ClipboardCheck className="w-4 h-4 text-purple-500 dark:text-purple-300" />
+          <h3 className="text-sm font-bold font-display text-slate-900 dark:text-white">
+            Bài tập củng cố theo bài học ({groupedLessons.length} thư mục • {visibleExercises.length} bộ đề)
           </h3>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
             type="button"
-            onClick={() => openQuickAiModal()}
+            onClick={() =>
+              openQuickAiModal(
+                activeGroupObj && activeGroupObj.name !== OTHER_GROUP_NAME
+                  ? activeGroupObj.name
+                  : '',
+              )
+            }
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Tạo Câu Hỏi Bằng AI</span>
+            <span>
+              {activeGroupObj && activeGroupObj.name !== OTHER_GROUP_NAME
+                ? 'Tạo Đề AI Cho Bài Này'
+                : 'Tạo Câu Hỏi Bằng AI'}
+            </span>
           </button>
 
           {isAdmin && (
             <button
               type="button"
               onClick={openCreateModal}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl glass-button border border-purple-400/30 text-purple-200 hover:text-white text-xs font-bold cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl glass-button border border-purple-400/30 text-purple-700 dark:text-purple-200 hover:text-purple-900 dark:hover:text-white text-xs font-bold cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Tạo Thủ Công</span>
@@ -876,13 +1095,53 @@ export default function ReinforcementExercisePanel({
         </div>
       </div>
 
+      {/* Thanh lọc loại bài & ô tìm kiếm nhanh */}
+      {!isLoading && visibleExercises.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            {[
+              { id: 'all', label: `Tất cả (${visibleExercises.length})` },
+              { id: 'standard', label: `Bài chuẩn (${standardCountTotal})` },
+              { id: 'ai', label: `AI của tôi (${aiCountTotal})` },
+            ].map((tab) => {
+              const active = scopeFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setScopeFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                    active
+                      ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                      : 'glass-card text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="relative sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm tên bài học hoặc bộ đề..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:border-purple-400"
+            />
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="py-10 text-center text-xs text-slate-400 space-y-2">
           <Loader2 className="w-6 h-6 text-purple-400 animate-spin mx-auto" />
           <p>Đang tải bài tập củng cố...</p>
         </div>
       ) : visibleExercises.length === 0 ? (
-        <div className="py-10 text-center text-xs sm:text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl space-y-3">
+        <div className="py-10 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-white/10 rounded-2xl space-y-3">
           <p>Chưa có bài tập củng cố kiến thức nào trong môn {subject?.name}.</p>
           <button
             type="button"
@@ -893,85 +1152,115 @@ export default function ReinforcementExercisePanel({
             <span>Tạo bộ câu hỏi đầu tiên bằng AI</span>
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {visibleExercises.map((ex) => {
-            const mcCount = ex.mcQuestions?.length || 0;
-            const tfCount = ex.tfQuestions?.length || 0;
-            const isPersonal = ex.scope === 'personal';
-            const canDeleteThis =
-              isAdmin ||
-              (isPersonal && (ex.ownerUsername === username || ex.createdBy === username));
+      ) : groupedLessons.length === 0 ? (
+        <div className="py-8 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-white/10 rounded-2xl">
+          Không tìm thấy bài học hoặc bộ câu hỏi nào khớp với bộ lọc hiện tại.
+        </div>
+      ) : activeGroupObj ? (
+        /* CẤP 2: BÊN TRONG 1 THƯ MỤC BÀI HỌC */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl glass-card border border-slate-200/80 dark:border-white/10 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedLessonGroup(null)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl glass-button text-xs font-semibold cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Thư mục bài học</span>
+              </button>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Folder className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0" />
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                  {activeGroupObj.name}
+                </span>
+              </div>
+            </div>
 
+            <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+              {activeGroupObj.standardItems.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 font-semibold">
+                  {activeGroupObj.standardItems.length} bài chuẩn
+                </span>
+              )}
+              {activeGroupObj.aiItems.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-semibold">
+                  {activeGroupObj.aiItems.length} đề AI
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Khu vực 1: Bài tập chuẩn của hệ thống (luôn ghim trên cùng) */}
+          {activeGroupObj.standardItems.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-300">
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                <span>Bài tập chuẩn ({activeGroupObj.standardItems.length})</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {activeGroupObj.standardItems.map((ex) => renderExerciseCard(ex))}
+              </div>
+            </div>
+          )}
+
+          {/* Khu vực 2: Các bộ đề AI tự tạo (mới nhất lên đầu, đánh số rõ ràng) */}
+          {activeGroupObj.aiItems.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-300">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Bộ câu hỏi AI của bạn ({activeGroupObj.aiItems.length})</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {activeGroupObj.aiItems.map((ex, idx) =>
+                  renderExerciseCard(ex, `Đề AI #${activeGroupObj.aiItems.length - idx}`),
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* CẤP 1: LƯỚI THƯ MỤC BÀI HỌC (ĐỒNG BỘ VỚI VIDEO BÀI GIẢNG & SƠ ĐỒ TƯ DUY) */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {groupedLessons.map((group) => {
+            const totalInGroup = group.standardItems.length + group.aiItems.length;
             return (
               <div
-                key={ex.id}
-                onClick={() => handleOpenExercise(ex)}
-                className="p-4 rounded-2xl glass-card border border-white/10 hover:border-purple-400/50 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+                key={group.name}
+                onClick={() => setSelectedLessonGroup(group.name)}
+                className="p-4 rounded-2xl glass-card border border-slate-200/80 dark:border-white/10 hover:border-purple-400/60 cursor-pointer transition-all flex items-center justify-between gap-3 group"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div
-                    className={`p-2.5 rounded-xl border shrink-0 ${
-                      isPersonal
-                        ? 'bg-cyan-500/15 border-cyan-400/30 text-cyan-300'
-                        : 'bg-purple-500/15 border-purple-500/30 text-purple-300'
-                    }`}
-                  >
-                    {isPersonal ? (
-                      <Sparkles className="w-4 h-4" />
-                    ) : (
-                      <ClipboardCheck className="w-4 h-4" />
-                    )}
+                  <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 dark:text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <Folder className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
-                        {ex.title}
-                      </h4>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 flex-wrap">
-                      <span>{mcCount} trắc nghiệm</span>
-                      {tfCount > 0 && (
-                        <>
-                          <span>•</span>
-                          <span>{tfCount} đúng/sai</span>
-                        </>
-                      )}
-                      {isPersonal && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-400/30 text-[10px] font-semibold text-cyan-300">
-                          <Lock className="w-2.5 h-2.5" />
-                          Riêng bạn
+                    <h4
+                      title={group.name}
+                      className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors"
+                    >
+                      {group.name}
+                    </h4>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {group.standardItems.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-[10px] font-bold text-purple-700 dark:text-purple-300">
+                          {group.standardItems.length} bài chuẩn
                         </span>
+                      )}
+                      {group.aiItems.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 text-[10px] font-bold text-cyan-700 dark:text-cyan-300">
+                          {group.aiItems.length} đề AI
+                        </span>
+                      )}
+                      {group.standardItems.length === 0 && group.aiItems.length === 0 && (
+                        <span className="text-[11px] text-slate-400">{totalInGroup} bộ đề</span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-xs font-semibold text-purple-300 mr-1">
-                    Làm bài →
-                  </span>
-                  {isAdmin && !isPersonal && (
-                    <button
-                      type="button"
-                      onClick={(e) => openEditModal(ex, e)}
-                      className="p-1.5 rounded-xl glass-button text-purple-300 hover:text-white cursor-pointer"
-                      title="Chỉnh sửa bài tập"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {canDeleteThis && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteExercise(ex, e)}
-                      className="p-1.5 rounded-xl glass-button text-rose-400 hover:bg-rose-500/20 cursor-pointer"
-                      title="Xóa bài tập"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-500 dark:group-hover:text-purple-300 group-hover:translate-x-0.5 transition-all shrink-0" />
               </div>
             );
           })}
