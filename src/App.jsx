@@ -98,7 +98,7 @@ export default function App() {
       case 'quiz':
         return <QuizReviewView currentUser={currentUser} />;
       case 'games':
-        return <GamificationView />;
+        return <GamificationView currentUser={currentUser} />;
       case 'users':
         return currentUser?.role === 'admin' ? (
           <UserManagementView

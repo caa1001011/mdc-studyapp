@@ -1,284 +1,519 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Gamepad2,
   Trophy,
   Award,
   Sparkles,
   Crown,
-  RotateCcw
+  Zap,
+  Grid2x2,
+  Atom,
+  Scale,
+  FlaskConical,
+  Type,
+  Link2,
+  Play,
+  Flame,
+  Target,
+  Brain,
+  Star,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
-import { MEMORY_MATCH_CARDS, BADGES_DATA, LEADERBOARD_USERS } from '../../data/mockData';
+import { STUDY_SUBJECTS } from '../../data/mockData';
+import { getSessionUser } from '../../services/authService';
+import { fetchLessonFolders } from '../../services/studyService';
+import { fetchTextbookDecks, fetchUserFlashcardDecks } from '../../services/flashcardService';
+import {
+  GAME_CATALOG,
+  loadGameQuestions,
+  recordGameResult,
+  fetchUserGameStats,
+  fetchGameLeaderboard,
+} from '../../services/gameService';
+import GameScopeModal from './games/GameScopeModal';
+import GameArena from './games/GameArena';
 
-export default function GamificationView() {
-  const [cards, setCards] = useState(() =>
-    [...MEMORY_MATCH_CARDS].sort(() => Math.random() - 0.5)
-  );
-  const [flippedIndices, setFlippedIndices] = useState([]);
-  const [matchedPairIds, setMatchedPairIds] = useState([]);
-  const [moves, setMoves] = useState(0);
-  const [activeTab, setActiveTab] = useState('minigame'); // 'minigame' | 'leaderboard' | 'badges'
+const GAME_ICONS = {
+  Zap,
+  Grid2x2,
+  Atom,
+  Scale,
+  FlaskConical,
+  Sparkles,
+  Type,
+  Link2,
+};
 
-  const handleCardClick = (index) => {
-    if (flippedIndices.includes(index) || matchedPairIds.includes(cards[index].pairId)) {
-      return;
+export default function GamificationView({ currentUser: propsUser }) {
+  const sessionUser = getSessionUser();
+  const currentUser = propsUser || sessionUser;
+  const username = currentUser?.username || 'student';
+  const fullName = currentUser?.fullName || username;
+  const avatar = currentUser?.avatar || '';
+
+  const [activeTab, setActiveTab] = useState('arcade'); // 'arcade' | 'leaderboard' | 'badges'
+  const [subjectFilter, setSubjectFilter] = useState('all');
+
+  // Dữ liệu bài học & flashcard để khoanh vùng kiến thức
+  const [lessonFolders, setLessonFolders] = useState([]);
+  const [englishDecks, setEnglishDecks] = useState([]);
+  const [userStats, setUserStats] = useState({ totalXp: 0, gamesPlayed: 0, bestScores: {} });
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  // Luồng chọn game -> khoanh vùng bài học -> chơi game
+  const [pendingGame, setPendingGame] = useState(null);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const [activeSession, setActiveSession] = useState(null); // { game, items, sourceLabel, scopeSummary }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadInitial() {
+      const [foldersRes, tbDecksRes, personalDecksRes, statsRes, boardRes] = await Promise.all([
+        fetchLessonFolders().catch(() => []),
+        fetchTextbookDecks().catch(() => []),
+        fetchUserFlashcardDecks(username).catch(() => []),
+        fetchUserGameStats(username).catch(() => ({ totalXp: 0, gamesPlayed: 0, bestScores: {} })),
+        fetchGameLeaderboard().catch(() => []),
+      ]);
+      if (cancelled) return;
+      setLessonFolders(Array.isArray(foldersRes) ? foldersRes : []);
+      setEnglishDecks([
+        ...(Array.isArray(tbDecksRes) ? tbDecksRes : []),
+        ...(Array.isArray(personalDecksRes) ? personalDecksRes : []),
+      ]);
+      setUserStats(statsRes || { totalXp: 0, gamesPlayed: 0, bestScores: {} });
+      setLeaderboard(Array.isArray(boardRes) ? boardRes : []);
     }
+    loadInitial();
+    return () => {
+      cancelled = true;
+    };
+  }, [username]);
 
-    if (flippedIndices.length === 0) {
-      setFlippedIndices([index]);
-    } else if (flippedIndices.length === 1) {
-      const firstIndex = flippedIndices[0];
-      const secondIndex = index;
-      setFlippedIndices([firstIndex, secondIndex]);
-      setMoves((prev) => prev + 1);
-
-      if (cards[firstIndex].pairId === cards[secondIndex].pairId) {
-        setMatchedPairIds((prev) => [...prev, cards[firstIndex].pairId]);
-        setFlippedIndices([]);
-
-        if (matchedPairIds.length + 1 === cards.length / 2) {
-          confetti({
-            particleCount: 100,
-            spread: 80,
-            origin: { y: 0.6 },
-          });
+  // Danh sách tên bài học unique theo môn (sắp xếp tự nhiên Bài 1, Bài 2, ...)
+  const getLessonNamesForSubject = (subjectId) => {
+    const seen = new Set();
+    const names = [];
+    lessonFolders
+      .filter((f) => f.subjectId === subjectId)
+      .forEach((f) => {
+        const clean = String(f.name || '').trim();
+        if (!clean) return;
+        const key = clean.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          names.push(clean);
         }
-      } else {
-        setTimeout(() => {
-          setFlippedIndices([]);
-        }, 900);
-      }
+      });
+    return names.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+  };
+
+  const filteredGames = useMemo(() => {
+    if (subjectFilter === 'all') return GAME_CATALOG;
+    return GAME_CATALOG.filter((g) => g.subjectId === subjectFilter);
+  }, [subjectFilter]);
+
+  const handleStartWithScope = async ({
+    selectedLessons,
+    selectedFlashcardDecks,
+    forceRefreshAI,
+    scopeSummary,
+  }) => {
+    if (!pendingGame) return;
+    setIsLoadingQuestions(true);
+    try {
+      const { items, sourceLabel } = await loadGameQuestions({
+        game: pendingGame,
+        selectedLessons,
+        selectedFlashcardDecks,
+        forceRefreshAI,
+      });
+      setActiveSession({
+        game: pendingGame,
+        items,
+        sourceLabel,
+        scopeSummary,
+      });
+      setPendingGame(null);
+    } finally {
+      setIsLoadingQuestions(false);
     }
   };
 
-  const handleResetGame = () => {
-    setCards([...MEMORY_MATCH_CARDS].sort(() => Math.random() - 0.5));
-    setFlippedIndices([]);
-    setMatchedPairIds([]);
-    setMoves(0);
+  const handleGameComplete = async ({ score, xpEarned }) => {
+    if (!activeSession?.game) return { isNewRecord: false };
+    const { stats, isNewRecord } = await recordGameResult({
+      username,
+      fullName,
+      avatar,
+      gameId: activeSession.game.id,
+      score,
+      xpEarned,
+    });
+    setUserStats(stats);
+    fetchGameLeaderboard()
+      .then((board) => setLeaderboard(board))
+      .catch(() => {});
+    return { isNewRecord };
   };
 
-  const isGameWon = matchedPairIds.length === cards.length / 2;
+  // Huy hiệu động theo thành tích thực tế
+  const dynamicBadges = useMemo(() => {
+    const played = Number(userStats.gamesPlayed || 0);
+    const xp = Number(userStats.totalXp || 0);
+    const distinctGames = Object.keys(userStats.bestScores || {}).length;
+    const maxSingleScore = Math.max(0, ...Object.values(userStats.bestScores || {}).map(Number));
+
+    return [
+      {
+        id: 'first-play',
+        name: 'Khởi Động Hứng Khởi',
+        desc: 'Hoàn thành ván trò chơi học tập đầu tiên',
+        icon: Play,
+        unlocked: played >= 1,
+        color: 'from-purple-500 to-indigo-500',
+      },
+      {
+        id: 'five-games',
+        name: 'Chiến Binh Chăm Chỉ',
+        desc: 'Hoàn thành ít nhất 5 ván luyện phản xạ',
+        icon: Flame,
+        unlocked: played >= 5,
+        color: 'from-amber-500 to-rose-500',
+      },
+      {
+        id: 'multi-subject',
+        name: 'Toàn Diện 4 Môn',
+        desc: 'Thử sức ít nhất 4 trò chơi khác nhau',
+        icon: Brain,
+        unlocked: distinctGames >= 4,
+        color: 'from-cyan-500 to-blue-500',
+      },
+      {
+        id: 'high-score',
+        name: 'Phản Xạ Siêu Tốc',
+        desc: 'Đạt từ 1.000 điểm trở lên trong 1 ván chơi',
+        icon: Target,
+        unlocked: maxSingleScore >= 1000,
+        color: 'from-emerald-500 to-teal-500',
+      },
+      {
+        id: 'xp-master',
+        name: 'Thủ Khoa Game Học Tập',
+        desc: 'Tích lũy từ 500 XP trở lên qua các trò chơi',
+        icon: Crown,
+        unlocked: xp >= 500,
+        color: 'from-yellow-400 to-amber-500',
+      },
+      {
+        id: 'all-eight',
+        name: 'Chinh Phục Cả 8 Game',
+        desc: 'Đã chơi qua toàn bộ 8 trò chơi của hệ thống',
+        icon: Star,
+        unlocked: distinctGames >= 8,
+        color: 'from-fuchsia-500 to-pink-500',
+      },
+    ];
+  }, [userStats]);
+
+  // Nếu đang ở trong màn chơi của 1 game
+  if (activeSession) {
+    return (
+      <>
+        <GameArena
+          game={activeSession.game}
+          items={activeSession.items}
+          sourceLabel={activeSession.sourceLabel}
+          scopeSummary={activeSession.scopeSummary}
+          onComplete={handleGameComplete}
+          onChangeScope={() => setPendingGame(activeSession.game)}
+          onExit={() => setActiveSession(null)}
+        />
+
+        {pendingGame && (
+          <GameScopeModal
+            game={pendingGame}
+            username={username}
+            lessonNames={getLessonNamesForSubject(pendingGame.subjectId)}
+            flashcardDecks={pendingGame.subjectId === 'sub-3' ? englishDecks : []}
+            isLoadingQuestions={isLoadingQuestions}
+            onClose={() => setPendingGame(null)}
+            onStart={handleStartWithScope}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
-    <div className="space-y-6 md:space-y-8 pb-10">
+    <div className="space-y-5 sm:space-y-6 pb-10">
       {/* 1. Header & Tab Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold mb-2">
-            <Gamepad2 className="w-3.5 h-3.5 text-rose-300" />
-            <span>Trò Chơi Học Tập & Thử Thách</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
-            Trò Chơi & Thi Đua
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white flex items-center gap-2.5">
+            <Gamepad2 className="w-7 h-7 text-rose-400" />
+            <span>Trò Chơi Học Tập</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Vừa chơi vừa ôn nhanh công thức và thi đua chăm chỉ cùng bạn bè
+            8 trò chơi rèn phản xạ &amp; trí nhớ sâu — khoanh vùng đúng bài học bạn đang học
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/10">
-          <button
-            onClick={() => setActiveTab('minigame')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'minigame'
-                ? 'bg-purple-600/30 text-white border border-purple-400/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Ghép Cặp Công Thức
-          </button>
-          <button
-            onClick={() => setActiveTab('leaderboard')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'leaderboard'
-                ? 'bg-purple-600/30 text-white border border-purple-400/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Bảng Thi Đua Tuần
-          </button>
-          <button
-            onClick={() => setActiveTab('badges')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'badges'
-                ? 'bg-purple-600/30 text-white border border-purple-400/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Huy Hiệu Đã Đạt
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 text-xs font-bold inline-flex items-center gap-1.5">
+            <Trophy className="w-3.5 h-3.5" />
+            <span>{userStats.totalXp || 0} XP</span>
+          </div>
+
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/10">
+            <button
+              type="button"
+              onClick={() => setActiveTab('arcade')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'arcade'
+                  ? 'bg-purple-600/40 text-white border border-purple-400/40 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Sảnh Game (8)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('leaderboard')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'leaderboard'
+                  ? 'bg-purple-600/40 text-white border border-purple-400/40 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Bảng Xếp Hạng
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('badges')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'badges'
+                  ? 'bg-purple-600/40 text-white border border-purple-400/40 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Huy Hiệu
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 2. TAB: MINIGAME */}
-      {activeTab === 'minigame' && (
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* Controls Bar */}
-          <div className="flex items-center justify-between p-4 rounded-2xl glass-card border border-white/10 text-xs">
-            <div className="flex items-center gap-3">
-              <span className="text-slate-400">
-                Số lần lật: <strong className="text-white font-bold text-sm">{moves}</strong>
-              </span>
-              <span>•</span>
-              <span className="text-slate-400">
-                Đã ghép đúng: <strong className="text-emerald-400 font-bold text-sm">{matchedPairIds.length} / {cards.length / 2}</strong>
-              </span>
-            </div>
-
+      {/* 2. TAB: SẢNH 8 TRÒ CHƠI */}
+      {activeTab === 'arcade' && (
+        <div className="space-y-4">
+          {/* Bộ lọc theo môn học */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <button
-              onClick={handleResetGame}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-button text-xs font-semibold text-purple-300 hover:text-white"
+              type="button"
+              onClick={() => setSubjectFilter('all')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                subjectFilter === 'all'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-purple-400/50 shadow-sm'
+                  : 'glass-card text-slate-300 border-white/10 hover:text-white'
+              }`}
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Chơi lại</span>
+              Tất cả môn ({GAME_CATALOG.length})
             </button>
-          </div>
-
-          {/* Cards Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {cards.map((card, idx) => {
-              const isFlipped = flippedIndices.includes(idx);
-              const isMatched = matchedPairIds.includes(card.pairId);
-
+            {STUDY_SUBJECTS.map((sub) => {
+              const count = GAME_CATALOG.filter((g) => g.subjectId === sub.id).length;
+              const active = subjectFilter === sub.id;
               return (
-                <div
-                  key={card.id}
-                  onClick={() => handleCardClick(idx)}
-                  className={`h-28 sm:h-32 rounded-2xl p-3 flex items-center justify-center text-center cursor-pointer transition-all duration-300 border select-none ${
-                    isMatched
-                      ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 shadow-lg shadow-emerald-500/10'
-                      : isFlipped
-                      ? 'bg-purple-600/30 border-purple-400 text-white shadow-xl shadow-purple-500/20 scale-105'
-                      : 'glass-card border-white/10 hover:border-purple-400/30 text-transparent'
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => setSubjectFilter(sub.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                    active
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-purple-400/50 shadow-sm'
+                      : 'glass-card text-slate-300 border-white/10 hover:text-white'
                   }`}
                 >
-                  {isFlipped || isMatched ? (
-                    <span className="text-xs sm:text-sm font-bold font-display leading-snug">
-                      {card.text}
-                    </span>
-                  ) : (
-                    <Sparkles className="w-6 h-6 text-indigo-400/60 dark:text-purple-400/40" />
-                  )}
-                </div>
+                  {sub.name} ({count})
+                </button>
               );
             })}
           </div>
 
-          {/* Victory Card */}
-          {isGameWon && (
-            <div className="rounded-3xl glass-card p-6 text-center border border-emerald-500/40 shadow-2xl">
-              <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-2 animate-bounce" />
-              <h3 className="text-xl font-bold font-display text-white">Chúc Mừng! Bạn Đã Hoàn Thành!</h3>
-              <p className="text-xs text-slate-300 mt-1 mb-4">
-                Bạn đã ghép đúng tất cả các cặp công thức trong {moves} lượt lật.
-              </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-200 text-xs font-semibold">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <span>+120 Điểm Tích Lũy (XP)</span>
-              </div>
+          {/* Lưới 8 thẻ trò chơi */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {filteredGames.map((game) => {
+              const Icon = GAME_ICONS[game.iconName] || Gamepad2;
+              const best = Number(userStats.bestScores?.[game.id] || 0);
+
+              return (
+                <div
+                  key={game.id}
+                  onClick={() => setPendingGame(game)}
+                  className="group rounded-3xl glass-card border border-white/10 hover:border-purple-400/50 p-5 flex flex-col justify-between gap-4 cursor-pointer transition-all"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div
+                        className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${game.accent} text-white flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                      >
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${game.badgeClass}`}
+                      >
+                        {game.subjectName}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-base font-extrabold font-display text-white group-hover:text-purple-300 transition-colors">
+                        {game.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed line-clamp-3">
+                        {game.subtitle}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">{game.skill}</span>
+                      <span className="font-mono font-bold text-amber-300">
+                        {best > 0 ? `Kỷ lục: ${best}` : 'Chưa chơi'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPendingGame(game);
+                      }}
+                      className={`w-full py-2.5 px-3 rounded-xl bg-gradient-to-r ${game.accent} text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md group-hover:opacity-95 transition-opacity cursor-pointer`}
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Chọn bài &amp; Chơi</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3. TAB: BẢNG XẾP HẠNG THẬT TRÊN FIRESTORE */}
+      {activeTab === 'leaderboard' && (
+        <div className="max-w-3xl mx-auto rounded-3xl glass-card p-5 sm:p-6 border border-white/10 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-bold font-display text-white flex items-center gap-2">
+              <Crown className="w-5 h-5 text-amber-400" />
+              <span>Bảng Xếp Hạng Trò Chơi Học Tập</span>
+            </h3>
+            <span className="text-xs text-slate-400">{leaderboard.length} học sinh</span>
+          </div>
+
+          {leaderboard.length === 0 ? (
+            <div className="py-10 text-center text-xs text-slate-400 border border-dashed border-white/10 rounded-2xl">
+              Chưa có điểm xếp hạng nào. Hãy chơi ván đầu tiên để ghi tên lên bảng vàng!
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {leaderboard.map((u, idx) => {
+                const isMe = u.username === username;
+                return (
+                  <div
+                    key={u.username}
+                    className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                      isMe
+                        ? 'bg-purple-600/20 border-purple-400/50'
+                        : 'bg-white/[0.03] border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-extrabold shrink-0 ${
+                          idx === 0
+                            ? 'bg-amber-400/25 text-amber-300 border border-amber-400/50'
+                            : idx === 1
+                            ? 'bg-slate-300/20 text-slate-200 border border-slate-300/40'
+                            : idx === 2
+                            ? 'bg-orange-400/20 text-orange-300 border border-orange-400/40'
+                            : 'bg-white/5 text-slate-400'
+                        }`}
+                      >
+                        #{idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-white truncate">
+                          {u.fullName} {isMe && <span className="text-xs text-purple-300">(Bạn)</span>}
+                        </div>
+                        <div className="text-[11px] text-slate-400">{u.gamesPlayed} ván đã chơi</div>
+                      </div>
+                    </div>
+
+                    <span className="px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-mono font-extrabold text-xs shrink-0">
+                      {u.totalXp} XP
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* 3. TAB: LEADERBOARD */}
-      {activeTab === 'leaderboard' && (
-        <div className="max-w-2xl mx-auto space-y-3">
-          <div className="p-4 rounded-2xl glass-card border border-white/10 flex items-center justify-between text-xs text-slate-400 font-semibold mb-2">
-            <span>Hạng & Học Sinh</span>
-            <span>Điểm Tích Lũy Tuần</span>
-          </div>
-
-          {LEADERBOARD_USERS.map((user) => (
-            <div
-              key={user.rank}
-              className={`p-4 rounded-2xl glass-card border flex items-center justify-between transition-all ${
-                user.rank === 2
-                  ? 'border-purple-400/40 bg-purple-500/10 shadow-lg shadow-purple-500/10'
-                  : 'border-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="w-7 text-center">
-                  {user.rank === 1 && <Crown className="w-5 h-5 text-amber-400 mx-auto" />}
-                  {user.rank === 2 && <span className="font-extrabold text-purple-300 font-display text-base">#2</span>}
-                  {user.rank === 3 && <span className="font-extrabold text-amber-500 font-display text-base">#3</span>}
-                  {user.rank > 3 && <span className="font-bold text-slate-500 text-sm">#{user.rank}</span>}
+      {/* 4. TAB: HUY HIỆU */}
+      {activeTab === 'badges' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {dynamicBadges.map((b) => {
+            const BIcon = b.icon;
+            return (
+              <div
+                key={b.id}
+                className={`p-5 rounded-3xl glass-card border flex items-center gap-4 transition-all ${
+                  b.unlocked ? 'border-amber-400/40' : 'border-white/10 opacity-60'
+                }`}
+              >
+                <div
+                  className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${b.color} text-white flex items-center justify-center shrink-0 shadow-lg`}
+                >
+                  <BIcon className="w-6 h-6" />
                 </div>
-
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-10 h-10 rounded-xl object-cover border border-white/20"
-                />
-
-                <div>
-                  <h4 className="text-sm font-bold text-white font-display flex items-center gap-2">
-                    {user.name}
-                    {user.rank === 2 && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 font-semibold border border-purple-400/40">
-                        Bạn
-                      </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-white truncate">{b.name}</h4>
+                    {b.unlocked && (
+                      <Award className="w-4 h-4 text-amber-400 shrink-0" />
                     )}
-                  </h4>
-                  <span className="text-[11px] text-slate-400">{user.badge}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{b.desc}</p>
+                  <span
+                    className={`inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      b.unlocked
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-white/10 text-slate-400'
+                    }`}
+                  >
+                    {b.unlocked ? 'Đã mở khóa' : 'Chưa mở khóa'}
+                  </span>
                 </div>
               </div>
-
-              <div className="text-right">
-                <span className="text-base font-extrabold font-display text-white block">
-                  {user.xp.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-purple-300">XP</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* 4. TAB: BADGES */}
-      {activeTab === 'badges' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
-          {BADGES_DATA.map((badge) => (
-            <div
-              key={badge.id}
-              className={`p-5 rounded-3xl glass-card border relative overflow-hidden transition-all ${
-                badge.unlocked
-                  ? 'border-purple-400/40 shadow-lg shadow-purple-500/10'
-                  : 'border-white/5 opacity-50'
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
-                    badge.unlocked
-                      ? 'bg-gradient-to-tr ' + badge.color
-                      : 'bg-white/10 text-slate-500'
-                  }`}
-                >
-                  <Award className="w-6 h-6" />
-                </div>
-
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    badge.unlocked
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : 'bg-white/[0.04] text-slate-500 border-white/10'
-                  }`}
-                >
-                  {badge.unlocked ? 'Đã Nhận' : 'Chưa Đạt'}
-                </span>
-              </div>
-
-              <div className="mt-4">
-                <h4 className="text-sm font-bold text-white font-display">{badge.name}</h4>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">{badge.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* MODAL KHOANH VÙNG BÀI HỌC TRƯỚC KHI VÀO GAME */}
+      {pendingGame && (
+        <GameScopeModal
+          game={pendingGame}
+          username={username}
+          lessonNames={getLessonNamesForSubject(pendingGame.subjectId)}
+          flashcardDecks={pendingGame.subjectId === 'sub-3' ? englishDecks : []}
+          isLoadingQuestions={isLoadingQuestions}
+          onClose={() => setPendingGame(null)}
+          onStart={handleStartWithScope}
+        />
       )}
     </div>
   );
