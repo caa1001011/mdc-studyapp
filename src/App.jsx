@@ -116,7 +116,7 @@ export default function App() {
 
   return (
     <ConfirmDeleteProvider>
-    <div className={`min-h-screen relative transition-colors duration-500 selection:bg-purple-500/30 selection:text-purple-200 ${
+    <div className={`min-h-screen relative transition-colors duration-500 selection:bg-indigo-500/25 selection:text-indigo-950 dark:selection:bg-purple-500/45 dark:selection:text-white ${
       theme === 'dark' ? 'text-slate-100' : 'text-slate-800'
     }`}>
       {/* 1. Global Ambient Glow Background (Tự thích ứng theo Dark / Light Mode) */}

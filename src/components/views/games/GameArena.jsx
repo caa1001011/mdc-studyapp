@@ -1399,21 +1399,21 @@ export default function GameArena({
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-extrabold text-orange-300 uppercase tracking-wider">
+              <span className="text-[11px] font-extrabold text-orange-600 dark:text-orange-300 uppercase tracking-wider">
                 {fishTier.tier.name}
               </span>
               {fishState.mood === 'combo' && (
-                <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/40 text-[10px] font-bold text-amber-300">
+                <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-500/20 dark:border-amber-400/40 text-[10px] font-bold dark:text-amber-300">
                   SIÊU TỐC
                 </span>
               )}
               {fishState.mood === 'urgent' && (
-                <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-400/40 text-[10px] font-bold text-rose-300">
+                <span className="px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-300 dark:bg-rose-500/20 dark:border-rose-400/40 text-[10px] font-bold dark:text-rose-300">
                   CẨN THẬN!
                 </span>
               )}
             </div>
-            <p className="text-xs sm:text-sm font-medium text-white/95 leading-snug mt-0.5">
+            <p className="text-xs sm:text-sm font-medium text-slate-800 dark:text-white/95 leading-snug mt-0.5">
               “{fishState.message}”
             </p>
           </div>

@@ -96,6 +96,17 @@ html:not(.dark) {
   color-scheme: light;
 }
 
+/* Đảm bảo chữ khi bôi đen (selection) luôn rõ nét ở cả Giao diện Sáng và Tối */
+::selection {
+  background-color: rgba(99, 102, 241, 0.25);
+  color: #1e1b4b;
+}
+
+html.dark ::selection {
+  background-color: rgba(168, 85, 247, 0.45);
+  color: #ffffff;
+}
+
 html:not(.dark) body {
   background-color: #f3f6fb;
   color: #0f172a;

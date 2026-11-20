@@ -30,7 +30,6 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  Sparkles,
   X
 } from 'lucide-react';
 import { STUDY_SUBJECTS } from '../../data/mockData';
@@ -1330,18 +1329,6 @@ export default function StudySpaceView({ currentUser: propsUser }) {
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPendingAiLesson(selectedFolder.name);
-                        setActiveCategory('exercise');
-                        setSelectedFolder(null);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer shrink-0"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Tạo câu hỏi củng cố bằng AI</span>
-                    </button>
                   </div>
                 )}
 

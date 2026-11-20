@@ -335,13 +335,13 @@ export default function GamificationView({ currentUser: propsUser }) {
         return (
         <div className="space-y-4">
           {/* Thẻ tiến hóa & tương tác Linh vật Cá Hề */}
-          <div className="rounded-2xl glass-card border border-orange-400/25 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3.5 justify-between">
-            <div className="flex items-center gap-3.5 min-w-0">
+          <div className="rounded-2xl glass-card border border-orange-400/30 dark:border-orange-400/25 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3.5 justify-between">
+            <div className="flex items-center gap-3.5 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={handleTapHubFish}
                 title="Chạm vào Cá Hề để tương tác!"
-                className="shrink-0 rounded-2xl bg-gradient-to-br from-orange-500/20 to-sky-500/15 border border-orange-400/30 p-1.5 hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+                className="shrink-0 rounded-2xl bg-gradient-to-br from-orange-100 to-sky-100 dark:from-orange-500/20 dark:to-sky-500/15 border border-orange-300/70 dark:border-orange-400/30 p-1.5 hover:scale-105 active:scale-95 transition-transform cursor-pointer"
               >
                 <ClownfishSvg
                   mood={hubFishMood}
@@ -352,19 +352,19 @@ export default function GamificationView({ currentUser: propsUser }) {
                 />
               </button>
 
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm sm:text-base font-extrabold text-white">
+                  <span className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                     {fishInfo.tier.name}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${fishInfo.tier.accent}`}>
                     {fishInfo.tier.badge}
                   </span>
-                  <span className="text-[11px] text-slate-400 hidden md:inline">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden md:inline">
                     • Chạm vào cá để tương tác
                   </span>
                 </div>
-                <p className="text-xs sm:text-[13px] text-orange-200/95 mt-0.5 leading-snug">
+                <p className="inline-block max-w-full rounded-xl px-3 py-1.5 text-xs sm:text-[13px] font-medium leading-snug bg-orange-50/90 text-slate-800 border border-orange-200/80 dark:bg-orange-500/10 dark:text-orange-100 dark:border-orange-400/25">
                   “{hubFishLine}”
                 </p>
               </div>
@@ -372,14 +372,14 @@ export default function GamificationView({ currentUser: propsUser }) {
 
             <div className="sm:w-56 shrink-0 space-y-1.5">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-400 font-medium">
+                <span className="text-slate-600 dark:text-slate-400 font-medium">
                   {fishInfo.nextTier ? `Tiến hóa: ${fishInfo.nextTier.name}` : 'Đã đạt cấp tối thượng!'}
                 </span>
-                <span className="font-mono font-bold text-amber-300">
+                <span className="font-mono font-bold text-amber-600 dark:text-amber-300">
                   {fishInfo.nextTier ? `còn ${fishInfo.xpToNext} XP` : 'MAX'}
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-2 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
                 <div
                   className={`h-full rounded-full bg-gradient-to-r ${fishInfo.tier.accent} transition-all duration-500`}
                   style={{ width: `${fishInfo.progressPct}%` }}
