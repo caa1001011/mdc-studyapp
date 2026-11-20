@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getSessionUser } from '../../services/authService';
+import { emitMascotEvent } from '../../services/mascotService';
 import {
   uploadFileToGoogleDrive,
   deleteFileFromGoogleDrive,
@@ -199,6 +200,11 @@ export default function FlashcardView({ currentUser: propsUser }) {
           particleCount: 90,
           spread: 75,
           origin: { y: 0.6 },
+        });
+        emitMascotEvent({
+          mood: 'celebrate',
+          message: 'Xuất sắc! Bạn đã ôn xong trọn bộ Flashcard rồi — trí nhớ siêu đỉnh!',
+          duration: 5500,
         });
       }
     },

@@ -31,6 +31,15 @@ import {
 } from '../../services/gameService';
 import GameScopeModal from './games/GameScopeModal';
 import GameArena from './games/GameArena';
+import ClownfishSvg from '../mascot/ClownfishSvg';
+import { getClownfishTier, setMascotXp, TAP_QUOTES } from '../../services/mascotService';
+
+const SUBJECT_FISH_CHEERS = {
+  'sub-1': 'Toán Học hả? Khởi động não tính nhanh cùng tớ nào!',
+  'sub-2': 'Vật Lý siêu cuốn! Đừng để thiên thạch công thức rơi nha!',
+  'sub-3': 'Tiếng Anh nè! Chơi bằng chính bộ Flashcard của bạn cực đã!',
+  'sub-4': 'Hóa Học vào phòng thí nghiệm phản ứng thôi!',
+};
 
 const GAME_ICONS = {
   Zap,
@@ -63,6 +72,11 @@ export default function GamificationView({ currentUser: propsUser }) {
   const [pendingGame, setPendingGame] = useState(null);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [activeSession, setActiveSession] = useState(null); // { game, items, sourceLabel, scopeSummary }
+  const [hubFishFlip, setHubFishFlip] = useState(false);
+  const [hubFishMood, setHubFishMood] = useState('happy');
+  const [hubFishLine, setHubFishLine] = useState(
+    'Chọn một trò chơi và khoanh vùng bài học — kiếm XP để giúp tớ tiến hóa nhé!',
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +95,7 @@ export default function GamificationView({ currentUser: propsUser }) {
         ...(Array.isArray(personalDecksRes) ? personalDecksRes : []),
       ]);
       setUserStats(statsRes || { totalXp: 0, gamesPlayed: 0, bestScores: {} });
+      setMascotXp(Number(statsRes?.totalXp || 0));
       setLeaderboard(Array.isArray(boardRes) ? boardRes : []);
     }
     loadInitial();
@@ -150,6 +165,7 @@ export default function GamificationView({ currentUser: propsUser }) {
       xpEarned,
     });
     setUserStats(stats);
+    setMascotXp(Number(stats?.totalXp || 0));
     fetchGameLeaderboard()
       .then((board) => setLeaderboard(board))
       .catch(() => {});
@@ -224,6 +240,7 @@ export default function GamificationView({ currentUser: propsUser }) {
           items={activeSession.items}
           sourceLabel={activeSession.sourceLabel}
           scopeSummary={activeSession.scopeSummary}
+          userXp={userStats.totalXp || 0}
           onComplete={handleGameComplete}
           onChangeScope={() => setPendingGame(activeSession.game)}
           onExit={() => setActiveSession(null)}
@@ -303,8 +320,74 @@ export default function GamificationView({ currentUser: propsUser }) {
       </div>
 
       {/* 2. TAB: SẢNH 8 TRÒ CHƠI */}
-      {activeTab === 'arcade' && (
+      {activeTab === 'arcade' && (() => {
+        const fishInfo = getClownfishTier(userStats.totalXp || 0);
+        const handleTapHubFish = () => {
+          setHubFishFlip(true);
+          setHubFishMood('celebrate');
+          setHubFishLine(TAP_QUOTES[Math.floor(Math.random() * TAP_QUOTES.length)]);
+          setTimeout(() => {
+            setHubFishFlip(false);
+            setHubFishMood('happy');
+          }, 750);
+        };
+
+        return (
         <div className="space-y-4">
+          {/* Thẻ tiến hóa & tương tác Linh vật Cá Hề */}
+          <div className="rounded-2xl glass-card border border-orange-400/25 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3.5 justify-between">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <button
+                type="button"
+                onClick={handleTapHubFish}
+                title="Chạm vào Cá Hề để tương tác!"
+                className="shrink-0 rounded-2xl bg-gradient-to-br from-orange-500/20 to-sky-500/15 border border-orange-400/30 p-1.5 hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+              >
+                <ClownfishSvg
+                  mood={hubFishMood}
+                  tier={fishInfo.tier.id}
+                  size={60}
+                  isFlipping={hubFishFlip}
+                  showBubbles
+                />
+              </button>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm sm:text-base font-extrabold text-white">
+                    {fishInfo.tier.name}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${fishInfo.tier.accent}`}>
+                    {fishInfo.tier.badge}
+                  </span>
+                  <span className="text-[11px] text-slate-400 hidden md:inline">
+                    • Chạm vào cá để tương tác
+                  </span>
+                </div>
+                <p className="text-xs sm:text-[13px] text-orange-200/95 mt-0.5 leading-snug">
+                  “{hubFishLine}”
+                </p>
+              </div>
+            </div>
+
+            <div className="sm:w-56 shrink-0 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 font-medium">
+                  {fishInfo.nextTier ? `Tiến hóa: ${fishInfo.nextTier.name}` : 'Đã đạt cấp tối thượng!'}
+                </span>
+                <span className="font-mono font-bold text-amber-300">
+                  {fishInfo.nextTier ? `còn ${fishInfo.xpToNext} XP` : 'MAX'}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full rounded-full bg-gradient-to-r ${fishInfo.tier.accent} transition-all duration-500`}
+                  style={{ width: `${fishInfo.progressPct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Bộ lọc theo môn học */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {STUDY_SUBJECTS.map((sub) => {
@@ -314,7 +397,11 @@ export default function GamificationView({ currentUser: propsUser }) {
                 <button
                   key={sub.id}
                   type="button"
-                  onClick={() => setSubjectFilter(sub.id)}
+                  onClick={() => {
+                    setSubjectFilter(sub.id);
+                    setHubFishMood('happy');
+                    setHubFishLine(SUBJECT_FISH_CHEERS[sub.id] || 'Chọn game và chiến thôi!');
+                  }}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                     active
                       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-purple-400/50 shadow-sm'
@@ -388,7 +475,8 @@ export default function GamificationView({ currentUser: propsUser }) {
             })}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* 3. TAB: BẢNG XẾP HẠNG THẬT TRÊN FIRESTORE */}
       {activeTab === 'leaderboard' && (

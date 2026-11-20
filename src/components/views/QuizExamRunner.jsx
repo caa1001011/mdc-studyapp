@@ -23,6 +23,7 @@ import {
   isRealNumberEqual,
   parseRealNumber,
 } from '../../services/quizService';
+import { emitMascotEvent, getScoreReaction } from '../../services/mascotService';
 
 const getItemLetter = (idx) => String.fromCharCode(97 + idx);
 
@@ -436,6 +437,15 @@ export default function QuizExamRunner({ exam, subject, category, onExit }) {
       particleCount: 95,
       spread: 75,
       origin: { y: 0.6 },
+    });
+    const graded = gradeExamSubmission(normalizedExam, {
+      mcAnswers,
+      tfAnswers,
+      shortAnswers,
+    });
+    emitMascotEvent({
+      ...getScoreReaction(graded?.scoreOutOf10 ?? 0, 'đề thi'),
+      duration: 6000,
     });
   };
 

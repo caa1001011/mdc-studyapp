@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import PageLoading from './components/PageLoading';
 import { ConfirmDeleteProvider } from './components/ConfirmDeleteProvider';
+import FloatingClownfish from './components/mascot/FloatingClownfish';
 import LoginView from './components/views/LoginView';
 import { getSessionUser, saveSessionUser, clearSessionUser, ensureAdminAccount } from './services/authService';
 
@@ -152,6 +153,9 @@ export default function App() {
           </Suspense>
         </main>
       </div>
+
+      {/* 4. Linh vật Cá Hề tương tác toàn hệ thống */}
+      <FloatingClownfish activeTab={activeTab} currentUser={currentUser} />
     </div>
     </ConfirmDeleteProvider>
   );

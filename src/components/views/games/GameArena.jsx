@@ -4,7 +4,6 @@ import {
   Clock,
   Flame,
   Heart,
-  Trophy,
   RotateCcw,
   SlidersHorizontal,
   CheckCircle2,
@@ -14,6 +13,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import ClownfishSvg from '../../mascot/ClownfishSvg';
+import {
+  getClownfishTier,
+  getGameReaction,
+  setMascotSuppressed,
+} from '../../../services/mascotService';
 
 function shuffle(arr) {
   const c = [...arr];
@@ -38,17 +43,38 @@ function GameResultSummary({
   xpEarned,
   isNewRecord,
   scopeSummary,
+  userXp,
   onReplay,
   onChangeScope,
   onExit,
 }) {
   const accuracy = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+  const fishTier = getClownfishTier((userXp || 0) + (xpEarned || 0));
+  const fishMood = isNewRecord
+    ? 'celebrate'
+    : accuracy >= 70
+      ? 'celebrate'
+      : accuracy >= 40
+        ? 'happy'
+        : 'study';
+  const fishReaction = getGameReaction(
+    isNewRecord
+      ? 'record'
+      : accuracy >= 70
+        ? 'finish_great'
+        : accuracy >= 40
+          ? 'finish_good'
+          : 'finish_try',
+  );
 
   return (
     <div className="max-w-xl mx-auto rounded-3xl glass-card border border-purple-500/35 p-6 sm:p-8 text-center space-y-5 shadow-2xl">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-[2px] mx-auto shadow-xl shadow-purple-500/30">
-        <div className="w-full h-full rounded-[14px] bg-white dark:bg-[#0f1120] flex items-center justify-center">
-          <Trophy className="w-8 h-8 text-amber-400" />
+      <div className="flex flex-col items-center gap-2">
+        <div className="relative">
+          <ClownfishSvg mood={fishMood} tier={fishTier.tier.id} size={96} showBubbles />
+        </div>
+        <div className="clownfish-bubble-box rounded-2xl px-4 py-2 text-xs sm:text-sm font-semibold max-w-md">
+          “{fishReaction.message}”
         </div>
       </div>
 
@@ -117,7 +143,7 @@ function GameResultSummary({
 /**
  * ENGINE 1: BLITZ (60s) & SURVIVAL (3 mạng) — dùng cho Toán Blitz, Hóa Phản Ứng, Hóa Nguyên Tố
  */
-function McArcadeEngine({ items, mode = 'blitz', accent, onFinish }) {
+function McArcadeEngine({ items, mode = 'blitz', accent, onFinish, onFishReact }) {
   const [queue] = useState(() => shuffle(items));
   const [idx, setIdx] = useState(0);
   const [score, setScore] = useState(0);
@@ -151,6 +177,9 @@ function McArcadeEngine({ items, mode = 'blitz', accent, onFinish }) {
     if (finishedRef.current || feedback) return undefined;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
+        if (mode === 'blitz' && prev === 11) {
+          onFishReact?.('urgent_time');
+        }
         if (prev <= 1) {
           if (mode === 'blitz') {
             triggerFinish(score, correctCount, answeredCount, bestCombo);
@@ -172,7 +201,7 @@ function McArcadeEngine({ items, mode = 'blitz', accent, onFinish }) {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [mode, feedback, lives, score, correctCount, answeredCount, bestCombo, triggerFinish]);
+  }, [mode, feedback, lives, score, correctCount, answeredCount, bestCombo, triggerFinish, onFishReact]);
 
   const handlePick = (optIdx) => {
     if (feedback || finishedRef.current) return;
@@ -190,10 +219,16 @@ function McArcadeEngine({ items, mode = 'blitz', accent, onFinish }) {
       const mult = Math.min(4, 1 + Math.floor(nextCombo / 3));
       nextScore = score + 100 * mult;
       nextCorrect = correctCount + 1;
+      onFishReact?.('correct', { combo: nextCombo });
     } else {
       nextCombo = 0;
       if (mode === 'survival') {
         nextLives = lives - 1;
+      }
+      if (mode === 'survival' && nextLives === 1) {
+        onFishReact?.('urgent_life');
+      } else {
+        onFishReact?.('wrong');
       }
     }
 
@@ -345,7 +380,7 @@ function McArcadeEngine({ items, mode = 'blitz', accent, onFinish }) {
 /**
  * ENGINE 2: PHYSICS DROP — Thiên thạch câu hỏi rơi từ trên xuống (3 mạng)
  */
-function PhysicsDropEngine({ items, onFinish }) {
+function PhysicsDropEngine({ items, onFinish, onFishReact }) {
   const [queue] = useState(() => shuffle(items));
   const [idx, setIdx] = useState(0);
   const [dropPct, setDropPct] = useState(0);
@@ -414,6 +449,7 @@ function PhysicsDropEngine({ items, onFinish }) {
       setCorrectCount((c) => c + 1);
       setAnsweredCount(nextAnswered);
       setFlash('hit');
+      onFishReact?.('correct', { combo: nextCombo });
       setTimeout(() => {
         if (idx + 1 >= queue.length * 2) {
           finishNow(nextScore, correctCount + 1, nextAnswered, nextBest);
@@ -429,6 +465,7 @@ function PhysicsDropEngine({ items, onFinish }) {
       setCombo(0);
       setAnsweredCount(nextAnswered);
       setFlash('miss');
+      onFishReact?.(nextLives === 1 ? 'urgent_life' : 'wrong');
       setTimeout(() => {
         if (nextLives <= 0) {
           finishNow(score, correctCount, nextAnswered, bestCombo);
@@ -522,7 +559,7 @@ function PhysicsDropEngine({ items, onFinish }) {
 /**
  * ENGINE 3: TRUE / FALSE SPEED RUSH (6 giây / mệnh đề, 3 mạng) — Vật Lý
  */
-function TrueFalseRushEngine({ items, onFinish }) {
+function TrueFalseRushEngine({ items, onFinish, onFishReact }) {
   const [queue] = useState(() => shuffle(items));
   const [idx, setIdx] = useState(0);
   const [timeLeft, setTimeLeft] = useState(6);
@@ -555,6 +592,7 @@ function TrueFalseRushEngine({ items, onFinish }) {
           setLives(nextLives);
           setCombo(0);
           setAnsweredCount((a) => a + 1);
+          onFishReact?.(nextLives === 1 ? 'urgent_life' : 'wrong');
           setFeedback({ isRight: false, text: `Hết giờ! ${current?.explanation || ''}` });
           setTimeout(() => {
             if (nextLives <= 0 || idx + 1 >= queue.length) {
@@ -571,7 +609,7 @@ function TrueFalseRushEngine({ items, onFinish }) {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [feedback, lives, idx, queue.length, current, score, correctCount, answeredCount, bestCombo, finishNow]);
+  }, [feedback, lives, idx, queue.length, current, score, correctCount, answeredCount, bestCombo, finishNow, onFishReact]);
 
   const handleAnswer = (val) => {
     if (feedback || finishedRef.current) return;
@@ -588,9 +626,11 @@ function TrueFalseRushEngine({ items, onFinish }) {
       nextBest = Math.max(bestCombo, nextCombo);
       nextScore = score + 100 + timeLeft * 15;
       nextCorrect = correctCount + 1;
+      onFishReact?.('correct', { combo: nextCombo });
     } else {
       nextCombo = 0;
       nextLives = lives - 1;
+      onFishReact?.(nextLives === 1 ? 'urgent_life' : 'wrong');
     }
 
     setScore(nextScore);
@@ -711,7 +751,7 @@ function buildMemoryDeck(items, count) {
 /**
  * ENGINE 4: FORMULA MEMORY MATCH — Lật thẻ ghép đôi (3 mức độ) — Toán Học
  */
-function MemoryMatchEngine({ items, onFinish }) {
+function MemoryMatchEngine({ items, onFinish, onFishReact }) {
   const initialCount = Math.min(6, items.length);
   const [pairCount, setPairCount] = useState(initialCount);
   const [cards, setCards] = useState(() => buildMemoryDeck(items, initialCount));
@@ -752,6 +792,7 @@ function MemoryMatchEngine({ items, onFinish }) {
         const nextMatched = [...matchedIds, cards[first].pairId];
         setMatchedIds(nextMatched);
         setFlipped([]);
+        onFishReact?.('correct', { combo: nextMatched.length });
 
         if (nextMatched.length === cards.length / 2) {
           const totalPairs = cards.length / 2;
@@ -766,6 +807,7 @@ function MemoryMatchEngine({ items, onFinish }) {
           }, 500);
         }
       } else {
+        onFishReact?.('wrong');
         setTimeout(() => setFlipped([]), 800);
       }
     }
@@ -841,7 +883,7 @@ function MemoryMatchEngine({ items, onFinish }) {
 /**
  * ENGINE 5: WORD SCRAMBLE — Xếp Chữ Săn Từ Vựng (Tiếng Anh)
  */
-function WordScrambleEngine({ items, onFinish }) {
+function WordScrambleEngine({ items, onFinish, onFishReact }) {
   const [queue] = useState(() => shuffle(items).slice(0, 10));
   const [idx, setIdx] = useState(0);
   const [score, setScore] = useState(0);
@@ -898,12 +940,14 @@ function WordScrambleEngine({ items, onFinish }) {
         setBestCombo(nextBest);
         setCorrectCount((c) => c + 1);
         setStatus('correct');
+        onFishReact?.('correct', { combo: nextCombo });
         setTimeout(() => advance(nextScore, correctCount + 1, nextBest, lives), 700);
       } else {
         const nextLives = lives - 1;
         setLives(nextLives);
         setCombo(0);
         setStatus('wrong');
+        onFishReact?.(nextLives === 1 ? 'urgent_life' : 'wrong');
         setTimeout(() => {
           if (nextLives <= 0) {
             advance(score, correctCount, bestCombo, 0);
@@ -1056,7 +1100,7 @@ function WordScrambleEngine({ items, onFinish }) {
 /**
  * ENGINE 6: VOCAB SPEED LINK — Nối Nghĩa 2 Cột Siêu Tốc 60s (Tiếng Anh)
  */
-function VocabSpeedLinkEngine({ items, onFinish }) {
+function VocabSpeedLinkEngine({ items, onFinish, onFishReact }) {
   const [pool] = useState(() => shuffle(items));
   const [round, setRound] = useState(0);
   const [selectedLeft, setSelectedLeft] = useState(null);
@@ -1085,6 +1129,9 @@ function VocabSpeedLinkEngine({ items, onFinish }) {
     if (finishedRef.current) return undefined;
     const t = setInterval(() => {
       setTimeLeft((prev) => {
+        if (prev === 11) {
+          onFishReact?.('urgent_time');
+        }
         if (prev <= 1) {
           if (!finishedRef.current) {
             finishedRef.current = true;
@@ -1101,7 +1148,7 @@ function VocabSpeedLinkEngine({ items, onFinish }) {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [score, correctCount, answeredCount, bestCombo, onFinish]);
+  }, [score, correctCount, answeredCount, bestCombo, onFinish, onFishReact]);
 
   const handleRightClick = (rightItem) => {
     if (!selectedLeft || matchedKeys.includes(rightItem.key)) return;
@@ -1117,6 +1164,7 @@ function VocabSpeedLinkEngine({ items, onFinish }) {
       setBestCombo(nextBest);
       setCorrectCount((c) => c + 1);
       setScore((s) => s + 100 + Math.min(3, Math.floor(nextCombo / 3)) * 25);
+      onFishReact?.('correct', { combo: nextCombo });
 
       if (nextMatched.length === boardPairs.length) {
         setTimeout(() => {
@@ -1128,6 +1176,7 @@ function VocabSpeedLinkEngine({ items, onFinish }) {
     } else {
       setCombo(0);
       setWrongPair({ left: selectedLeft.key, right: rightItem.key });
+      onFishReact?.('wrong');
       setTimeout(() => {
         setWrongPair(null);
         setSelectedLeft(null);
@@ -1238,12 +1287,42 @@ export default function GameArena({
   items,
   sourceLabel,
   scopeSummary,
+  userXp = 0,
   onComplete,
   onChangeScope,
   onExit,
 }) {
   const [runId, setRunId] = useState(0);
   const [result, setResult] = useState(null);
+  const [fishState, setFishState] = useState(() => getGameReaction('start'));
+  const [fishFlip, setFishFlip] = useState(false);
+  const fishResetRef = useRef(null);
+
+  const fishTier = useMemo(() => getClownfishTier(userXp), [userXp]);
+
+  // Ẩn Cá Hề nổi ở góc trong khi đang ở đấu trường game (dùng Cá Hề đấu trường chuyên biệt)
+  useEffect(() => {
+    setMascotSuppressed(true);
+    return () => {
+      setMascotSuppressed(false);
+      if (fishResetRef.current) clearTimeout(fishResetRef.current);
+    };
+  }, []);
+
+  const handleFishReact = useCallback((type, meta = {}) => {
+    const reaction = getGameReaction(type, meta);
+    setFishState(reaction);
+    if (type === 'correct' && (meta.combo || 0) >= 3) {
+      setFishFlip(true);
+      setTimeout(() => setFishFlip(false), 720);
+    }
+    if (fishResetRef.current) clearTimeout(fishResetRef.current);
+    if (type !== 'urgent_life' && type !== 'urgent_time') {
+      fishResetRef.current = setTimeout(() => {
+        setFishState((prev) => ({ ...prev, mood: 'idle' }));
+      }, 2600);
+    }
+  }, []);
 
   const handleEngineFinish = useCallback(
     async ({ score, correctCount, totalAnswered, bestCombo }) => {
@@ -1261,6 +1340,7 @@ export default function GameArena({
 
   const handleReplay = () => {
     setResult(null);
+    setFishState(getGameReaction('start'));
     setRunId((r) => r + 1);
   };
 
@@ -1297,6 +1377,49 @@ export default function GameArena({
         </button>
       </div>
 
+      {/* Đồng hành Cá Hề tương tác trực tiếp trong màn chơi */}
+      {!result && (
+        <div className="max-w-2xl mx-auto rounded-2xl glass-card border border-orange-400/25 px-3.5 py-2.5 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setFishFlip(true);
+              setTimeout(() => setFishFlip(false), 700);
+            }}
+            title="Chạm vào Cá Hề để lấy may!"
+            className="shrink-0 cursor-pointer focus:outline-none"
+          >
+            <ClownfishSvg
+              mood={fishState.mood}
+              tier={fishTier.tier.id}
+              size={52}
+              isFlipping={fishFlip}
+              showBubbles
+            />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-extrabold text-orange-300 uppercase tracking-wider">
+                {fishTier.tier.name}
+              </span>
+              {fishState.mood === 'combo' && (
+                <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/40 text-[10px] font-bold text-amber-300">
+                  SIÊU TỐC
+                </span>
+              )}
+              {fishState.mood === 'urgent' && (
+                <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-400/40 text-[10px] font-bold text-rose-300">
+                  CẨN THẬN!
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm font-medium text-white/95 leading-snug mt-0.5">
+              “{fishState.message}”
+            </p>
+          </div>
+        </div>
+      )}
+
       {result ? (
         <GameResultSummary
           game={game}
@@ -1307,6 +1430,7 @@ export default function GameArena({
           xpEarned={result.xpEarned}
           isNewRecord={result.isNewRecord}
           scopeSummary={scopeSummary}
+          userXp={userXp}
           onReplay={handleReplay}
           onChangeScope={onChangeScope}
           onExit={onExit}
@@ -1319,22 +1443,43 @@ export default function GameArena({
               mode={game.engine}
               accent={game.accent}
               onFinish={handleEngineFinish}
+              onFishReact={handleFishReact}
             />
           )}
           {game.engine === 'drop' && (
-            <PhysicsDropEngine items={items} onFinish={handleEngineFinish} />
+            <PhysicsDropEngine
+              items={items}
+              onFinish={handleEngineFinish}
+              onFishReact={handleFishReact}
+            />
           )}
           {game.engine === 'tf-rush' && (
-            <TrueFalseRushEngine items={items} onFinish={handleEngineFinish} />
+            <TrueFalseRushEngine
+              items={items}
+              onFinish={handleEngineFinish}
+              onFishReact={handleFishReact}
+            />
           )}
           {game.engine === 'memory' && (
-            <MemoryMatchEngine items={items} onFinish={handleEngineFinish} />
+            <MemoryMatchEngine
+              items={items}
+              onFinish={handleEngineFinish}
+              onFishReact={handleFishReact}
+            />
           )}
           {game.engine === 'scramble' && (
-            <WordScrambleEngine items={items} onFinish={handleEngineFinish} />
+            <WordScrambleEngine
+              items={items}
+              onFinish={handleEngineFinish}
+              onFishReact={handleFishReact}
+            />
           )}
           {game.engine === 'link' && (
-            <VocabSpeedLinkEngine items={items} onFinish={handleEngineFinish} />
+            <VocabSpeedLinkEngine
+              items={items}
+              onFinish={handleEngineFinish}
+              onFishReact={handleFishReact}
+            />
           )}
         </div>
       )}

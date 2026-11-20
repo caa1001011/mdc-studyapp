@@ -28,6 +28,7 @@ import {
   isEnglishSubject,
   canUserSeeExercise
 } from '../../services/exerciseService';
+import { emitMascotEvent, getScoreReaction } from '../../services/mascotService';
 import { useConfirmDelete } from '../ConfirmDeleteProvider';
 import { formatMathText } from '../../utils/mathFormat';
 
@@ -443,6 +444,29 @@ export default function ReinforcementExercisePanel({
       return items.length > 0 && items.every((it) => tfAnswers[it.id] !== undefined);
     };
 
+    const handleSubmitExercise = () => {
+      setIsSubmitted(true);
+      let calcMc = 0;
+      mcList.forEach((q) => {
+        if (mcAnswers[q.id] === q.correctIndex) calcMc += 1;
+      });
+      let calcTf = 0;
+      tfList.forEach((q) => {
+        const items = q.items || [];
+        let qCorrect = 0;
+        items.forEach((item) => {
+          if (tfAnswers[item.id] === item.isTrue) qCorrect += 1;
+        });
+        calcTf += scoreTrueFalseQuestion(qCorrect, items.length);
+      });
+      const earned = calcMc + calcTf;
+      const scoreOutOf10 = maxScore > 0 ? (earned / maxScore) * 10 : 10;
+      emitMascotEvent({
+        ...getScoreReaction(scoreOutOf10, 'bài tập củng cố'),
+        duration: 5500,
+      });
+    };
+
     const renderMcCard = (q, idx) => {
       const selectedOpt = mcAnswers[q.id];
       const isCorrect = isSubmitted && selectedOpt === q.correctIndex;
@@ -682,7 +706,7 @@ export default function ReinforcementExercisePanel({
               </span>
               <button
                 type="button"
-                onClick={() => setIsSubmitted(true)}
+                onClick={handleSubmitExercise}
                 disabled={answeredCount === 0}
                 className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 disabled:opacity-45 cursor-pointer"
               >
@@ -768,7 +792,7 @@ export default function ReinforcementExercisePanel({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setIsSubmitted(true)}
+                  onClick={handleSubmitExercise}
                   disabled={answeredCount === 0}
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 cursor-pointer"
                 >
