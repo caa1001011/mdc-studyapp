@@ -51,7 +51,7 @@ export default function GamificationView({ currentUser: propsUser }) {
   const avatar = currentUser?.avatar || '';
 
   const [activeTab, setActiveTab] = useState('arcade'); // 'arcade' | 'leaderboard' | 'badges'
-  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [subjectFilter, setSubjectFilter] = useState(STUDY_SUBJECTS[0]?.id || 'sub-1');
 
   // Dữ liệu bài học & flashcard để khoanh vùng kiến thức
   const [lessonFolders, setLessonFolders] = useState([]);
@@ -107,10 +107,10 @@ export default function GamificationView({ currentUser: propsUser }) {
     return names.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
   };
 
-  const filteredGames = useMemo(() => {
-    if (subjectFilter === 'all') return GAME_CATALOG;
-    return GAME_CATALOG.filter((g) => g.subjectId === subjectFilter);
-  }, [subjectFilter]);
+  const filteredGames = useMemo(
+    () => GAME_CATALOG.filter((g) => g.subjectId === subjectFilter),
+    [subjectFilter],
+  );
 
   const handleStartWithScope = async ({
     selectedLessons,
@@ -307,17 +307,6 @@ export default function GamificationView({ currentUser: propsUser }) {
         <div className="space-y-4">
           {/* Bộ lọc theo môn học */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => setSubjectFilter('all')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-                subjectFilter === 'all'
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-purple-400/50 shadow-sm'
-                  : 'glass-card text-slate-300 border-white/10 hover:text-white'
-              }`}
-            >
-              Tất cả môn ({GAME_CATALOG.length})
-            </button>
             {STUDY_SUBJECTS.map((sub) => {
               const count = GAME_CATALOG.filter((g) => g.subjectId === sub.id).length;
               const active = subjectFilter === sub.id;
@@ -338,8 +327,8 @@ export default function GamificationView({ currentUser: propsUser }) {
             })}
           </div>
 
-          {/* Lưới 8 thẻ trò chơi */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Lưới thẻ trò chơi theo môn đã chọn */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {filteredGames.map((game) => {
               const Icon = GAME_ICONS[game.iconName] || Gamepad2;
               const best = Number(userStats.bestScores?.[game.id] || 0);
