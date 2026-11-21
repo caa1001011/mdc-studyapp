@@ -14,6 +14,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { USER_PROFILE } from '../data/mockData';
+import { resolveUserAvatar } from '../utils/avatarUtils';
 
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Trang Chủ', shortLabel: 'Trang chủ', icon: LayoutDashboard, badge: null },
@@ -89,7 +90,7 @@ export default function Sidebar({
 
   const displayName = currentUser?.fullName || currentUser?.username || USER_PROFILE.name;
   const displayTitle = currentUser?.title || USER_PROFILE.title;
-  const displayAvatar = currentUser?.avatar || USER_PROFILE.avatar;
+  const displayAvatar = resolveUserAvatar(currentUser?.avatar, displayName, currentUser?.role);
 
   return (
     <>

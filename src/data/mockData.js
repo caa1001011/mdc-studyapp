@@ -3,7 +3,7 @@
 export const USER_PROFILE = {
   name: "Gia Kỳ",
   title: "Học sinh Lớp 12A1",
-  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+  avatar: "",
   level: 8,
   xp: 2840,
   nextLevelXp: 3500,

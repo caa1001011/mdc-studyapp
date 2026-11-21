@@ -22,6 +22,7 @@ import {
   updateExistingUser,
   deleteExistingUser
 } from '../../services/authService';
+import { resolveUserAvatar } from '../../utils/avatarUtils';
 
 export default function UserManagementView({ currentUser, onUserUpdated }) {
   const [users, setUsers] = useState([]);
@@ -400,11 +401,8 @@ export default function UserManagementView({ currentUser, onUserUpdated }) {
                   >
                     <div className="flex items-center gap-3.5">
                       <img
-                        src={
-                          u.avatar ||
-                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-                        }
-                        alt={u.fullName}
+                        src={resolveUserAvatar(u.avatar, u.fullName || u.username, u.role)}
+                        alt={u.fullName || u.username}
                         className="w-11 h-11 rounded-2xl object-cover border border-white/20 flex-shrink-0"
                       />
 

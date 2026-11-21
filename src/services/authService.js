@@ -18,7 +18,7 @@ export const DEFAULT_ADMIN_USER = {
   fullName: 'Quản Trị Viên',
   title: 'Quản trị hệ thống cao nhất',
   role: 'admin',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  avatar: '',
   level: 99,
   xp: 9999,
   nextLevelXp: 10000,
@@ -153,9 +153,7 @@ export async function createNewUser({ username, password, fullName, title, role 
     fullName: fullName?.trim() || cleanUsername,
     title: title?.trim() || (role === 'admin' ? 'Quản trị hệ thống' : 'Học sinh Lớp 12A1'),
     role: role === 'admin' ? 'admin' : 'student',
-    avatar:
-      avatar?.trim() ||
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatar: avatar?.trim() || '',
     level: 1,
     xp: 0,
     nextLevelXp: 1000,
@@ -213,7 +211,7 @@ export async function registerStudentAccount({ username, password, fullName, cla
     fullName: cleanFullName,
     title: cleanClass || 'Học sinh',
     role: 'student',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatar: '',
     level: 1,
     xp: 0,
     nextLevelXp: 1000,

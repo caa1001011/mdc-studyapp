@@ -9,6 +9,7 @@ import {
   Menu
 } from 'lucide-react';
 import { USER_PROFILE } from '../data/mockData';
+import { resolveUserAvatar } from '../utils/avatarUtils';
 
 export default function Navbar({
   activeTab,
@@ -66,7 +67,7 @@ export default function Navbar({
   const isDark = theme === 'dark';
   const displayName = currentUser?.fullName || currentUser?.username || USER_PROFILE.name;
   const displayTitle = currentUser?.title || USER_PROFILE.title;
-  const displayAvatar = currentUser?.avatar || USER_PROFILE.avatar;
+  const displayAvatar = resolveUserAvatar(currentUser?.avatar, displayName, currentUser?.role);
 
   return (
     <header className={`sticky top-0 z-40 w-full border-b px-3 sm:px-6 lg:px-8 py-2 transition-all ${
